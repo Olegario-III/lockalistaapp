@@ -6,7 +6,7 @@ import 'store_detail_page.dart';
 
 class StoreListPage extends StatelessWidget {
   const StoreListPage({super.key});
-  final FirestoreService _service = const FirestoreService();
+  final FirestoreService _service = const FirestoreService.instance;
 
   @override
   Widget build(BuildContext context) {

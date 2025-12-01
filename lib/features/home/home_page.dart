@@ -15,7 +15,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final FirestoreService _service = FirestoreService();
+  final FirestoreService _service = FirestoreService.instance;
   int _currentIndex = 0;
 
   late final List<Widget> _pages;

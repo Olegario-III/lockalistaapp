@@ -1,12 +1,11 @@
-// lib/features/events/event_list_page.dart
 import 'package:flutter/material.dart';
 import '../../core/services/firestore_service.dart';
 import '../../models/event_model.dart' as em;
 import 'event_detail_page.dart';
 
 class EventListPage extends StatelessWidget {
-  const EventListPage({super.key});
-  final FirestoreService _service = const FirestoreService();
+  EventListPage({super.key}); // removed const
+  final _service = FirestoreService.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +23,7 @@ class EventListPage extends StatelessWidget {
           }
           return ListView.separated(
             itemCount: events.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final e = events[index];
               return ListTile(
@@ -35,7 +34,11 @@ class EventListPage extends StatelessWidget {
                 subtitle: Text(e.description, maxLines: 2, overflow: TextOverflow.ellipsis),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [Text('${e.likesCount} ❤️'), const SizedBox(height: 4), Text('${e.comments.length} 💬')],
+                  children: [
+                    Text('${e.likesCount} ❤️'),
+                    const SizedBox(height: 4),
+                    Text('${e.comments.length} 💬')
+                  ],
                 ),
                 onTap: () => Navigator.push(
                   context,

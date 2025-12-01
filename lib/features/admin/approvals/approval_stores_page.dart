@@ -1,4 +1,3 @@
-// lib/features/admin/approvals/approval_stores_page.dart
 import 'package:flutter/material.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../models/store_model.dart';
@@ -8,12 +7,12 @@ class ApprovalStoresPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firestore = FirestoreService();
+    final firestore = FirestoreService.instance;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Approve Stores")),
       body: StreamBuilder<List<StoreModel>>(
-        stream: firestore.getStoresStream(onlyPending: true),
+        stream: firestore.getStoresStream(status: 'pending'),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final stores = snapshot.data!;
@@ -25,7 +24,7 @@ class ApprovalStoresPage extends StatelessWidget {
               final s = stores[index];
               return ListTile(
                 title: Text(s.name),
-                subtitle: Text(s.address),
+                subtitle: Text(s.address ?? "No address provided"),
                 trailing: IconButton(
                   icon: const Icon(Icons.check, color: Colors.green),
                   onPressed: () => firestore.approveStore(s.id),

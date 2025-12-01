@@ -6,7 +6,15 @@ import '../../models/user_model.dart' as um;
 
 /// FirestoreService — uses aliased model imports to avoid duplicate symbol names
 class FirestoreService {
+  FirestoreService._internal();
+  static final FirestoreService instance = FirestoreService._internal();
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  /// Generate a Firestore document ID without writing anything yet
+  String generateId(String collectionName) {
+    return _db.collection(collectionName).doc().id;
+  }
 
   // ===== EVENTS =====
 

@@ -1,10 +1,11 @@
-// lib/features/admin/admin_dashboard_page.dart
 import 'package:flutter/material.dart';
 import '../../core/services/firestore_service.dart';
 import '../../models/event_model.dart' as em;
+import 'approvals/approval_events_page.dart';
+import 'approvals/approval_stores_page.dart';
 
 class AdminDashboardPage extends StatelessWidget {
-  final _service = FirestoreService();
+  final _service = FirestoreService.instance;
 
   AdminDashboardPage({super.key});
 
@@ -24,9 +25,10 @@ class AdminDashboardPage extends StatelessWidget {
                   child: const Text('Review'),
                   onPressed: () {
                     Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => ApprovalEventsPage()));
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => ApprovalEventsPage()),
+                    );
                   },
                 ),
               ),
@@ -42,7 +44,8 @@ class AdminDashboardPage extends StatelessWidget {
                         child: const Text('Open'),
                         onPressed: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => ApprovedEventsPage()),
+                          MaterialPageRoute(
+                              builder: (_) => ApprovalEventsPage()),
                         ),
                       ),
                     ),
@@ -57,7 +60,8 @@ class AdminDashboardPage extends StatelessWidget {
                         child: const Text('Open'),
                         onPressed: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => ApprovedStoresPage()),
+                          MaterialPageRoute(
+                              builder: (_) => ApprovalStoresPage()),
                         ),
                       ),
                     ),

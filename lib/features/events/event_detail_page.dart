@@ -13,7 +13,7 @@ class EventDetailPage extends StatefulWidget {
 }
 
 class _EventDetailPageState extends State<EventDetailPage> {
-  final FirestoreService _service = const FirestoreService();
+  final _service = FirestoreService.instance;
   final TextEditingController _commentCtrl = TextEditingController();
   bool _processingLike = false;
 

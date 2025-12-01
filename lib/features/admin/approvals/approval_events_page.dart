@@ -1,12 +1,10 @@
-// lib/features/admin/approvals/approval_events_page.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../models/event_model.dart' as em;
 import '../../events/event_detail_page.dart';
 
 class ApprovalEventsPage extends StatelessWidget {
-  final FirestoreService _service = FirestoreService();
+  final _service = FirestoreService.instance;
 
   ApprovalEventsPage({super.key});
 
@@ -44,6 +42,7 @@ class ApprovalEventsPage extends StatelessWidget {
                         icon: const Icon(Icons.check, color: Colors.green),
                         onPressed: () async {
                           await _service.approveEvent(e.id);
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event approved')));
                         },
                       ),
@@ -51,6 +50,7 @@ class ApprovalEventsPage extends StatelessWidget {
                         icon: const Icon(Icons.close, color: Colors.red),
                         onPressed: () async {
                           await _service.updateEvent(e.id, {'status': 'rejected'});
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Event rejected')));
                         },
                       ),

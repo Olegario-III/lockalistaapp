@@ -1,4 +1,3 @@
-// lib/features/admin/approved/approved_events_page.dart
 import 'package:flutter/material.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../models/event_model.dart';
@@ -8,12 +7,12 @@ class ApprovedEventsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firestore = FirestoreService();
+    final firestore = FirestoreService.instance;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Approved Events")),
       body: StreamBuilder<List<EventModel>>(
-        stream: firestore.getEventsStream(onlyPending: false),
+        stream: firestore.getEventsStream(status: 'approved'),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final events = snapshot.data!;

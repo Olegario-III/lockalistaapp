@@ -8,7 +8,7 @@ class ReportedAccountsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final firestore = FirestoreService();
+    final firestore = FirestoreService.instance;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Reported Accounts")),

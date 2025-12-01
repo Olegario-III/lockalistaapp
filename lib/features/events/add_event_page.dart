@@ -30,16 +30,20 @@ class _AddEventPageState extends State<AddEventPage> {
       imageUrl = await CloudinaryService().uploadFile(imageFile!);
     }
 
+    final newId = FirestoreService.instance.generateId("events");
+
     final event = EventModel(
+      id: newId,
       title: titleCtrl.text,
       description: descCtrl.text,
       imageUrl: imageUrl ?? '',
-      Timestamp: DateTime.now(),
-      approved: false,
-      userId: '', // Current user id from FirebaseAuth
+      createdAt: DateTime.now(),
+      status: 'pending',
+      userId: '', // current user
     );
 
-    await FirestoreService().addEvent(event);
+    await FirestoreService.instance.addEvent(event);
+    if (!mounted) return;
     Navigator.pop(context);
   }
 

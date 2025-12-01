@@ -13,7 +13,7 @@ class StoreDetailPage extends StatefulWidget {
 }
 
 class _StoreDetailPageState extends State<StoreDetailPage> {
-  final FirestoreService _service = const FirestoreService();
+  final FirestoreService _service = const FirestoreService.instance;
   final TextEditingController _commentCtrl = TextEditingController();
   num _selectedRating = 0;
 
