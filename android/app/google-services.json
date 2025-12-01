@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "874343811496",
+    "project_id": "lockalista",
+    "storage_bucket": "lockalista.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:874343811496:android:5514c44c3317652bc6359d",
+        "android_client_info": {
+          "package_name": "com.example.lockalista"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "874343811496-8ds5utrtk3bb208bkan8vnu2airh1s5i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.lockalista",
+            "certificate_hash": "3cc9b682f7ce1195c5126b5fee289d1742ec63f3"
+          }
+        },
+        {
+          "client_id": "874343811496-p8la09lk5vu2oei1hv5jpfiqdp35poil.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwikQf1uigBcnZsbcNHhf18g_5Lg9Be44"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "874343811496-p8la09lk5vu2oei1hv5jpfiqdp35poil.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
