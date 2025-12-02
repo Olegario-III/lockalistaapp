@@ -1,7 +1,6 @@
 // lib/features/home/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../core/services/firestore_service.dart';
 import '../events/event_list_page.dart';
 import '../stores/store_list_page.dart';
 import '../search/search_page.dart';
@@ -15,7 +14,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final FirestoreService _service = FirestoreService.instance;
   int _currentIndex = 0;
 
   late final List<Widget> _pages;
@@ -24,10 +22,10 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _pages = [
-      const EventListPage(), // Home (events feed)
-      const StoreListPage(),
-      const SearchPage(),
-      const ProfilePage(),
+      EventListPage(), // Home (events feed)
+      StoreListPage(),
+      SearchPage(),
+      ProfilePage(),
     ];
   }
 

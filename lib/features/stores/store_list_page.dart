@@ -5,8 +5,8 @@ import '../../models/store_model.dart' as sm;
 import 'store_detail_page.dart';
 
 class StoreListPage extends StatelessWidget {
-  const StoreListPage({super.key});
-  final FirestoreService _service = const FirestoreService.instance;
+  StoreListPage({super.key});
+  final FirestoreService _service = FirestoreService.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +24,7 @@ class StoreListPage extends StatelessWidget {
           }
           return ListView.separated(
             itemCount: stores.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
+            separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final s = stores[index];
               final preview = s.images.isNotEmpty ? s.images.first : null;

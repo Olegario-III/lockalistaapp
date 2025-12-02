@@ -13,7 +13,7 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  final FirestoreService _service = const FirestoreService.instance;
+  final FirestoreService _service = FirestoreService.instance;
   final TextEditingController _q = TextEditingController();
   List<em.EventModel> _events = [];
   List<sm.StoreModel> _stores = [];

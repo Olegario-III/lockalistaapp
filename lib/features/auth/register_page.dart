@@ -19,11 +19,23 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _loading = true);
     try {
       await _auth.register(_email.text.trim(), _pass.text.trim());
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage()));
+
+      if (!mounted) return; // ✅ prevents context use after await
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Register failed: $e')));
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Register failed: $e')),
+      );
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -36,12 +48,32 @@ class _RegisterPageState extends State<RegisterPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(controller: _email, decoration: const InputDecoration(hintText: 'Email')),
+            TextField(
+              controller: _email,
+              decoration: const InputDecoration(hintText: 'Email'),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: _pass, obscureText: true, decoration: const InputDecoration(hintText: 'Password')),
+            TextField(
+              controller: _pass,
+              obscureText: true,
+              decoration: const InputDecoration(hintText: 'Password'),
+            ),
             const SizedBox(height: 18),
-            _loading ? const CircularProgressIndicator() : ElevatedButton(onPressed: _register, child: const Text('Create Account')),
-            TextButton(onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginPage())), child: const Text('Already have an account? Login'))
+            _loading
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: _register,
+                    child: const Text('Create Account'),
+                  ),
+            TextButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                );
+              },
+              child: const Text('Already have an account? Login'),
+            ),
           ],
         ),
       ),

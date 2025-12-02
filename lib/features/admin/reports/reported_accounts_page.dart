@@ -17,7 +17,7 @@ class ReportedAccountsPage extends StatelessWidget {
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final users = snapshot.data!
-              .where((u) => u.isReported ?? false) // Assuming 'isReported' flag exists
+              .where((u) => u.isReported) // Assuming 'isReported' flag exists
               .toList();
           if (users.isEmpty) return const Center(child: Text("No reported accounts."));
 

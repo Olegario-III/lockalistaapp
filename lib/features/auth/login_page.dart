@@ -1,4 +1,7 @@
+// lib/features/auth/login_page.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../../core/services/auth_service.dart';
 import '../home/home_page.dart';
 
@@ -11,20 +14,99 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final AuthService _authService = AuthService();
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  final TextEditingController _emailCtrl = TextEditingController();
+  final TextEditingController _passCtrl = TextEditingController();
   bool _loading = false;
 
+  // ─────────────────────────────────────────────
+  // EMAIL/PASSWORD LOGIN
+  // ─────────────────────────────────────────────
   Future<void> login() async {
+    if (_loading) return;
     setState(() => _loading = true);
+
     try {
-      await _authService.login(_emailCtrl.text, _passCtrl.text);
+      final user = await _authService.login(
+        _emailCtrl.text.trim(),
+        _passCtrl.text.trim(),
+      );
+
+      if (user == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login failed: no user returned')),
+        );
+        return;
+      }
+
+      if (!mounted) return;
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => HomePage()));
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String message;
+      switch (e.code) {
+        case 'user-not-found':
+          message = 'No user found for that email.';
+          break;
+        case 'wrong-password':
+          message = 'Incorrect password.';
+          break;
+        case 'network-request-failed':
+          message = 'Network error. Check your internet.';
+          break;
+        default:
+          message = 'Login failed: ${e.message}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
-      print(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    setState(() => _loading = false);
+  }
+
+  // ─────────────────────────────────────────────
+  // GOOGLE LOGIN
+  // ─────────────────────────────────────────────
+  Future<void> loginWithGoogle() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return; // user cancelled
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google login failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -32,31 +114,88 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text("Welcome Back", style: TextStyle(fontSize: 28)),
-            SizedBox(height: 32),
-            TextField(
-              controller: _emailCtrl,
-              decoration: InputDecoration(hintText: "Email"),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // ─────────────────────────────────────────────
+                // APP LOGO
+                // ─────────────────────────────────────────────
+                Image.asset(
+                  'assets/logo.png',
+                  height: 120,
+                ),
+                const SizedBox(height: 32),
+
+                // ─────────────────────────────────────────────
+                // EMAIL / PASSWORD FIELDS
+                // ─────────────────────────────────────────────
+                TextField(
+                  controller: _emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    hintText: "Email",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _passCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    hintText: "Password",
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // LOGIN BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : login,
+                    child: _loading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text("Login"),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // ─────────────────────────────────────────────
+                // GOOGLE LOGIN BUTTON
+                // ─────────────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: Image.asset(
+                      'assets/google_logo.png',
+                      height: 24,
+                      width: 24,
+                    ),
+                    label: const Text("Login with Google"),
+                    onPressed: _loading ? null : loginWithGoogle,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // REGISTER BUTTON
+                TextButton(
+                  onPressed: _loading
+                      ? null
+                      : () => Navigator.pushNamed(context, '/register'),
+                  child: const Text("Create account"),
+                ),
+              ],
             ),
-            SizedBox(height: 16),
-            TextField(
-              controller: _passCtrl,
-              obscureText: true,
-              decoration: InputDecoration(hintText: "Password"),
-            ),
-            SizedBox(height: 32),
-            _loading
-                ? CircularProgressIndicator()
-                : ElevatedButton(onPressed: login, child: Text("Login")),
-            TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/register');
-                },
-                child: Text("Create account"))
-          ],
+          ),
         ),
       ),
     );

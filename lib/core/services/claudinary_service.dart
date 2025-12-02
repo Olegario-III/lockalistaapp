@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:cloudinary_public/cloudinary_public.dart';
+import 'package:flutter/foundation.dart'; // for debugPrint()
 
 class CloudinaryService {
   final cloudinary = CloudinaryPublic(
@@ -15,7 +16,7 @@ class CloudinaryService {
       );
       return response.secureUrl;
     } catch (e) {
-      print('Cloudinary upload error: $e');
+      debugPrint('⚠️ Cloudinary upload error: $e');
       return null;
     }
   }

@@ -375,4 +375,39 @@ class FirestoreService {
       }
     });
   }
+
+    /// ===== SEARCH =====
+
+  Future<List<em.EventModel>> searchEvents(String query) async {
+    final qLower = query.toLowerCase();
+
+    final snap = await _db
+        .collection('events')
+        .where('status', isEqualTo: 'approved')
+        .get();
+
+    return snap.docs
+        .map((d) => em.EventModel.fromMap(d.data(), d.id))
+        .where((e) =>
+            e.title.toLowerCase().contains(qLower) ||
+            e.description.toLowerCase().contains(qLower))
+        .toList();
+  }
+
+  Future<List<sm.StoreModel>> searchStores(String query) async {
+    final qLower = query.toLowerCase();
+
+    final snap = await _db
+        .collection('stores')
+        .where('status', isEqualTo: 'approved')
+        .get();
+
+    return snap.docs
+        .map((d) => sm.StoreModel.fromMap(d.data(), d.id))
+        .where((s) =>
+            s.name.toLowerCase().contains(qLower) ||
+            (s.description ?? '').toLowerCase().contains(qLower))
+        .toList();
+  }
+
 }

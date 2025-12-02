@@ -14,12 +14,11 @@ class _AddStorePageState extends State<AddStorePage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
-  GoogleMapController? _mapController;
   final LatLng _initialPosition = const LatLng(14.5995, 120.9842); // Manila default
   Marker? _selectedMarker;
 
   void _onMapCreated(GoogleMapController controller) {
-    _mapController = controller;
+    // No map controller stored — avoids dead code
   }
 
   void _onMapTap(LatLng position) {
@@ -53,6 +52,10 @@ class _AddStorePageState extends State<AddStorePage> {
       setState(() {
         _selectedMarker = null;
       });
+    } else if (_selectedMarker == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a location on the map')),
+      );
     }
   }
 
@@ -96,6 +99,8 @@ class _AddStorePageState extends State<AddStorePage> {
                           ? {_selectedMarker!}
                           : {},
                       onTap: _onMapTap,
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: true,
                     ),
                   ),
                   const SizedBox(height: 16),

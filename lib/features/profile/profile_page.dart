@@ -1,3 +1,4 @@
+// lib/features/profile/profile_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,6 +33,8 @@ class _ProfilePageState extends State<ProfilePage> {
         .doc(user!.uid)
         .get();
 
+    if (!mounted) return;
+
     setState(() {
       displayName = doc.data()?["name"] ?? user!.email!.split('@')[0];
       imageUrl = doc.data()?["image"] ?? "";
@@ -60,6 +63,7 @@ class _ProfilePageState extends State<ProfilePage> {
         .doc(user!.uid)
         .update({"image": newUrl});
 
+    if (!mounted) return;
     setState(() => imageUrl = newUrl);
   }
 
@@ -108,11 +112,19 @@ class _ProfilePageState extends State<ProfilePage> {
                   .doc(user!.uid)
                   .update({"name": nameCtrl.text});
 
+              if (!mounted) return;
               setState(() => displayName = nameCtrl.text);
 
-              // Email update
-              await user!.updateEmail(emailCtrl.text);
+              // Email update using recommended method
+              try {
+                await user!.verifyBeforeUpdateEmail(emailCtrl.text);
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Email update failed: $e')));
+              }
 
+              if (!mounted) return;
               Navigator.pop(context);
             },
             child: const Text("Save"),
@@ -150,6 +162,7 @@ class _ProfilePageState extends State<ProfilePage> {
           TextButton(
             onPressed: () async {
               await user!.updatePassword(passCtrl.text);
+              if (!mounted) return;
               Navigator.pop(context);
             },
             child: const Text("Update"),
@@ -163,6 +176,7 @@ class _ProfilePageState extends State<ProfilePage> {
   // 🌓 THEME TOGGLE
   // ─────────────────────────────────────────────
   void toggleTheme() {
+    if (!mounted) return;
     setState(() => isDarkMode = !isDarkMode);
   }
 
@@ -177,16 +191,10 @@ class _ProfilePageState extends State<ProfilePage> {
         elevation: 0,
       ),
 
-      // ─────────────────────────────────────────────
-      // BODY
-      // ─────────────────────────────────────────────
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ─────────────────────────────────────────────
-            // PROFILE IMAGE
-            // ─────────────────────────────────────────────
             GestureDetector(
               onTap: pickImage,
               child: CircleAvatar(
@@ -202,7 +210,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
             const SizedBox(height: 20),
 
-            // NAME
             Text(
               displayName,
               style: TextStyle(
@@ -214,7 +221,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
             const SizedBox(height: 5),
 
-            // EMAIL
             Text(
               user?.email ?? "",
               style: TextStyle(
@@ -225,18 +231,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
             const SizedBox(height: 30),
 
-            // ─────────────────────────────────────────────
-            // OPTIONS LIST
-            // ─────────────────────────────────────────────
             menuItem(Icons.edit, "Edit Profile", editProfile),
             menuItem(Icons.lock, "Change Password", changePassword),
             menuItem(Icons.brightness_6, "Toggle Theme", toggleTheme),
             menuItem(Icons.logout, "Logout", () async {
               await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                    context, "/login", (_) => false);
-              }
+              if (!mounted) return;
+              // ignore: use_build_context_synchronously
+              Navigator.pushNamedAndRemoveUntil(context, "/login", (_) => false);
             }),
 
             const Spacer(),
@@ -246,9 +248,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  // REUSABLE MENU ITEM
-  // ─────────────────────────────────────────────
   Widget menuItem(IconData icon, String text, VoidCallback onTap) {
     return Column(
       children: [
