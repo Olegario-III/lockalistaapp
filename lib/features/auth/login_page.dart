@@ -123,7 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                 // APP LOGO
                 // ─────────────────────────────────────────────
                 Image.asset(
-                  'assets/logo.png',
+                  'assets/Lockalista_logo02.png',
                   height: 120,
                 ),
                 const SizedBox(height: 32),
