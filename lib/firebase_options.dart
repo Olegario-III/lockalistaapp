@@ -89,4 +89,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'lockalista.firebasestorage.app',
     measurementId: 'G-7248NWP39J',
   );
+
 }

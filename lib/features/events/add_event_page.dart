@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/services/firestore_service.dart';
-import '../../core/services/claudinary_service.dart';
+import '../../core/services/cloudinary_service.dart';
 import '../../models/event_model.dart';
 
 class AddEventPage extends StatefulWidget {
@@ -17,34 +17,59 @@ class _AddEventPageState extends State<AddEventPage> {
   final TextEditingController descCtrl = TextEditingController();
   File? imageFile;
   final picker = ImagePicker();
+  bool _isSubmitting = false;
 
+  // ────────────────────────────────
+  // 🖼 Pick image from gallery
+  // ────────────────────────────────
   Future<void> pickImage() async {
     final XFile? file = await picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
     setState(() => imageFile = File(file.path));
   }
 
+  // ────────────────────────────────
+  // 📤 Submit Event
+  // ────────────────────────────────
   Future<void> submitEvent() async {
-    String? imageUrl;
-    if (imageFile != null) {
-      imageUrl = await CloudinaryService().uploadFile(imageFile!);
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+
+    try {
+      String? imageUrl;
+
+      // Upload image to Cloudinary if selected
+      if (imageFile != null) {
+        imageUrl = await CloudinaryService().uploadFile(
+          imageFile!,
+          folder: 'events', // optional folder for event images
+        );
+      }
+
+      final newId = FirestoreService.instance.generateId("events");
+
+      final event = EventModel(
+        id: newId,
+        title: titleCtrl.text,
+        description: descCtrl.text,
+        imageUrl: imageUrl ?? '',
+        createdAt: DateTime.now(),
+        status: 'pending',
+        userId: '', // TODO: set current user ID
+      );
+
+      await FirestoreService.instance.addEvent(event);
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add event: $e')),
+      );
+    } finally {
+      setState(() => _isSubmitting = false);
     }
-
-    final newId = FirestoreService.instance.generateId("events");
-
-    final event = EventModel(
-      id: newId,
-      title: titleCtrl.text,
-      description: descCtrl.text,
-      imageUrl: imageUrl ?? '',
-      createdAt: DateTime.now(),
-      status: 'pending',
-      userId: '', // current user
-    );
-
-    await FirestoreService.instance.addEvent(event);
-    if (!mounted) return;
-    Navigator.pop(context);
   }
 
   @override
@@ -79,7 +104,10 @@ class _AddEventPageState extends State<AddEventPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: submitEvent, child: const Text("Submit Event")),
+              ElevatedButton(
+                onPressed: _isSubmitting ? null : submitEvent,
+                child: Text(_isSubmitting ? "Submitting..." : "Submit Event"),
+              ),
             ],
           ),
         ),

@@ -11,16 +11,30 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final AuthService _auth = AuthService();
+  final _name = TextEditingController();
   final _email = TextEditingController();
   final _pass = TextEditingController();
   bool _loading = false;
 
   Future<void> _register() async {
-    setState(() => _loading = true);
-    try {
-      await _auth.register(_email.text.trim(), _pass.text.trim());
+    if (_name.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name is required')),
+      );
+      return;
+    }
 
-      if (!mounted) return; // ✅ prevents context use after await
+    setState(() => _loading = true);
+
+    try {
+      // Register the user (role handled inside AuthService)
+      await _auth.register(
+        _email.text.trim(),
+        _pass.text.trim(),
+        _name.text.trim(),
+      );
+
+      if (!mounted) return;
 
       Navigator.pushReplacement(
         context,
@@ -48,6 +62,11 @@ class _RegisterPageState extends State<RegisterPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(hintText: 'Full Name'),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _email,
               decoration: const InputDecoration(hintText: 'Email'),
