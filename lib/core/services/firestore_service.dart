@@ -45,15 +45,23 @@ class FirestoreService {
     await _db.collection('events').doc(id).update(data);
   }
 
-  Stream<List<em.EventModel>> getEventsStream({String? status}) {
+  Stream<List<em.EventModel>> getEventsStream({String? status}) async* {
+  try {
     Query query = _db.collection('events').orderBy('createdAt', descending: true);
     if (status != null) {
       query = query.where('status', isEqualTo: status);
     }
-    return query.snapshots().map((snap) => snap.docs
-        .map((doc) => em.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-        .toList());
+
+    await for (final snap in query.snapshots()) {
+      yield snap.docs
+          .map((doc) => em.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList();
+    }
+  } catch (e) {
+    // Firestore collection might not exist yet, return empty list
+    yield [];
   }
+}
 
   Future<void> approveEvent(String id) async {
     await _db.collection('events').doc(id).update({'status': 'approved'});
