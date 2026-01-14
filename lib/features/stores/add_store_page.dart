@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/services/firestore_service.dart';
+import '../../core/utils/helpers.dart';
+import '../../models/store_model.dart';
+import 'package:uuid/uuid.dart';
 
 class AddStorePage extends StatefulWidget {
   const AddStorePage({super.key});
@@ -11,109 +14,93 @@ class AddStorePage extends StatefulWidget {
 
 class _AddStorePageState extends State<AddStorePage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
+  final _nameController = TextEditingController();
+  String selectedType = 'pharmacy';
+  String selectedBarangay = 'Darangan';
+  GeoPoint? selectedLocation;
+  bool _loading = false;
 
-  final LatLng _initialPosition = const LatLng(14.5995, 120.9842); // Manila default
-  Marker? _selectedMarker;
-
-  void _onMapCreated(GoogleMapController controller) {
-    // No map controller stored — avoids dead code
-  }
-
-  void _onMapTap(LatLng position) {
-    setState(() {
-      _selectedMarker = Marker(
-        markerId: const MarkerId('selectedStore'),
-        position: position,
-      );
-    });
-  }
-
-  Future<void> _saveStore() async {
-    if (_formKey.currentState!.validate() && _selectedMarker != null) {
-      await FirebaseFirestore.instance.collection('stores').add({
-        'name': _nameController.text,
-        'address': _addressController.text,
-        'location': GeoPoint(
-          _selectedMarker!.position.latitude,
-          _selectedMarker!.position.longitude,
-        ),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Store added successfully!')),
-      );
-
-      _nameController.clear();
-      _addressController.clear();
-      setState(() {
-        _selectedMarker = null;
-      });
-    } else if (_selectedMarker == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a location on the map')),
-      );
+  Future<void> _pickLocation() async {
+    final location = await Helpers.pickLocationOnMap(); // Implement with Google Maps picker
+    if (location != null) {
+      setState(() => selectedLocation = location);
     }
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate() || selectedLocation == null) return;
+
+    setState(() => _loading = true);
+
+    final id = const Uuid().v4();
+    final store = StoreModel(
+      id: id,
+      name: _nameController.text.trim(),
+      type: selectedType,
+      barangay: selectedBarangay,
+      location: selectedLocation!,
+      ownerId: Helpers.currentUserId(), // implement this
+    );
+
+    await FirestoreService.instance.addStore(store);
+
+    setState(() => _loading = false);
+    Helpers.showSnackBar(context, 'Store added! Waiting for admin approval.');
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Store'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(labelText: 'Store Name'),
-                    validator: (value) =>
-                        value == null || value.isEmpty ? 'Enter a name' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _addressController,
-                    decoration: const InputDecoration(labelText: 'Address'),
-                    validator: (value) =>
-                        value == null || value.isEmpty ? 'Enter an address' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 300,
-                    child: GoogleMap(
-                      onMapCreated: _onMapCreated,
-                      initialCameraPosition: CameraPosition(
-                        target: _initialPosition,
-                        zoom: 14,
-                      ),
-                      markers: _selectedMarker != null
-                          ? {_selectedMarker!}
-                          : {},
-                      onTap: _onMapTap,
-                      myLocationEnabled: true,
-                      myLocationButtonEnabled: true,
+      appBar: AppBar(title: Text('Add Store')),
+      body: _loading
+          ? Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: InputDecoration(labelText: 'Store Name'),
+                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _saveStore,
-                    child: const Text('Save Store'),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedType,
+                      items: ['pharmacy', 'resort', 'grocery', 'sari-sari store', 'karenderya', 'others']
+                          .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                          .toList(),
+                      onChanged: (v) => setState(() => selectedType = v!),
+                      decoration: InputDecoration(labelText: 'Store Type'),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedBarangay,
+                      items: ['Darangan', 'Barangay2', 'Barangay3']
+                          .map((b) => DropdownMenuItem(value: b, child: Text(b)))
+                          .toList(),
+                      onChanged: (v) => setState(() => selectedBarangay = v!),
+                      decoration: InputDecoration(labelText: 'Barangay'),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _pickLocation,
+                      icon: Icon(Icons.map),
+                      label: Text(selectedLocation == null
+                          ? 'Pick Store Location'
+                          : 'Location Selected'),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      onPressed: _submit,
+                      child: Text('Add Store'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }

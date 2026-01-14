@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../../core/services/firestore_service.dart';
 import '../../core/services/cloudinary_service.dart';
 import '../../core/services/auth_service.dart';
@@ -15,15 +16,17 @@ class AddEventPage extends StatefulWidget {
 }
 
 class _AddEventPageState extends State<AddEventPage> {
+  final _authService = AuthService();
+
   final TextEditingController titleCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
-  DateTime? selectedDate;
+
   File? imageFile;
   final picker = ImagePicker();
   bool _isSubmitting = false;
 
   // ────────────────────────────────
-  // 🖼 Pick image from gallery
+  // 🖼 Pick image
   // ────────────────────────────────
   Future<void> pickImage() async {
     final XFile? file = await picker.pickImage(source: ImageSource.gallery);
@@ -32,41 +35,26 @@ class _AddEventPageState extends State<AddEventPage> {
   }
 
   // ────────────────────────────────
-  // 📅 Pick event date
-  // ────────────────────────────────
-  Future<void> pickDate() async {
-    final now = DateTime.now();
-    final DateTime? date = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now,
-      lastDate: DateTime(now.year + 5),
-    );
-    if (date != null) setState(() => selectedDate = date);
-  }
-
-  // ────────────────────────────────
   // 📤 Submit Event
   // ────────────────────────────────
   Future<void> submitEvent() async {
     if (_isSubmitting) return;
 
-    if (titleCtrl.text.isEmpty || descCtrl.text.isEmpty || selectedDate == null) {
+    if (titleCtrl.text.trim().isEmpty || descCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields and select a date')),
+        const SnackBar(content: Text('Title and description are required')),
       );
       return;
     }
 
+    final currentUser = _authService.currentUser;
+    if (currentUser == null) return;
+
     setState(() => _isSubmitting = true);
 
     try {
-      final currentUser = AuthService.instance.currentUser;
-      if (currentUser == null) throw 'User not logged in';
-
       String? imageUrl;
 
-      // Upload image to Cloudinary if selected
       if (imageFile != null) {
         imageUrl = await CloudinaryService().uploadFile(
           imageFile!,
@@ -74,35 +62,37 @@ class _AddEventPageState extends State<AddEventPage> {
         );
       }
 
-      final newId = FirestoreService.instance.generateId('events');
+      final eventId = FirestoreService.instance.generateId('events');
 
       final event = EventModel(
-        id: newId,
+        id: eventId,
         title: titleCtrl.text.trim(),
         description: descCtrl.text.trim(),
-        imageUrl: imageUrl ?? '',
-        date: selectedDate!,
-        createdAt: DateTime.now(),
         userId: currentUser.uid,
-        approved: false, // pending by default
+        imageUrl: imageUrl,
+        createdAt: DateTime.now(),
+        status: 'pending', // 🔒 admin approval required
+        likesList: [],
+        likesCount: 0,
+        comments: [],
       );
 
       await FirestoreService.instance.addEvent(event);
 
       if (!mounted) return;
 
-      // Show alert: waiting for approval
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
           title: const Text('Event Submitted'),
           content: const Text(
-              'Your event is waiting for admin approval before it appears publicly.'),
+            'Your event is waiting for admin approval before it appears publicly.',
+          ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // close dialog
-                Navigator.pop(context); // go back
+                Navigator.pop(context);
+                Navigator.pop(context);
               },
               child: const Text('OK'),
             ),
@@ -122,7 +112,7 @@ class _AddEventPageState extends State<AddEventPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Add Event")),
+      appBar: AppBar(title: const Text('Add Event')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
@@ -130,27 +120,13 @@ class _AddEventPageState extends State<AddEventPage> {
             children: [
               TextField(
                 controller: titleCtrl,
-                decoration: const InputDecoration(labelText: "Event Title"),
+                decoration: const InputDecoration(labelText: 'Event Title'),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: descCtrl,
                 maxLines: 4,
-                decoration: const InputDecoration(labelText: "Description"),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(selectedDate != null
-                        ? 'Event Date: ${selectedDate!.toLocal().toString().split(' ')[0]}'
-                        : 'No date selected'),
-                  ),
-                  TextButton(
-                    onPressed: pickDate,
-                    child: const Text('Pick Date'),
-                  ),
-                ],
+                decoration: const InputDecoration(labelText: 'Description'),
               ),
               const SizedBox(height: 16),
               GestureDetector(
@@ -161,13 +137,13 @@ class _AddEventPageState extends State<AddEventPage> {
                   color: Colors.grey[300],
                   child: imageFile != null
                       ? Image.file(imageFile!, fit: BoxFit.cover)
-                      : const Center(child: Text("Tap to pick an image")),
+                      : const Center(child: Text('Tap to pick an image')),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isSubmitting ? null : submitEvent,
-                child: Text(_isSubmitting ? "Submitting..." : "Submit Event"),
+                child: Text(_isSubmitting ? 'Submitting...' : 'Submit Event'),
               ),
             ],
           ),

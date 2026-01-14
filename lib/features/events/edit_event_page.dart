@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../../core/services/firestore_service.dart';
 import '../../core/services/cloudinary_service.dart';
 import '../../core/services/auth_service.dart';
@@ -17,99 +18,94 @@ class EditEventPage extends StatefulWidget {
 }
 
 class _EditEventPageState extends State<EditEventPage> {
-  final TextEditingController titleCtrl = TextEditingController();
-  final TextEditingController descCtrl = TextEditingController();
-  DateTime? selectedDate;
-  File? imageFile;
-  final picker = ImagePicker();
+  final _titleCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+
+  DateTime? _selectedDate;
+  File? _imageFile;
   bool _isSubmitting = false;
+
+  final _picker = ImagePicker();
+  final _auth = AuthService();
+  final _firestore = FirestoreService.instance;
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill existing data
-    titleCtrl.text = widget.event.title;
-    descCtrl.text = widget.event.description;
-    selectedDate = widget.event.date;
+    _titleCtrl.text = widget.event.title;
+    _descCtrl.text = widget.event.description;
+    _selectedDate = widget.event.createdAt;
   }
 
   // ────────────────────────────────
-  // 🖼 Pick image from gallery
+  // Pick image
   // ────────────────────────────────
-  Future<void> pickImage() async {
-    final XFile? file = await picker.pickImage(source: ImageSource.gallery);
+  Future<void> _pickImage() async {
+    final file = await _picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
-    setState(() => imageFile = File(file.path));
+    setState(() => _imageFile = File(file.path));
   }
 
   // ────────────────────────────────
-  // 📅 Pick event date
+  // Pick date
   // ────────────────────────────────
-  Future<void> pickDate() async {
+  Future<void> _pickDate() async {
     final now = DateTime.now();
-    final DateTime? date = await showDatePicker(
+    final date = await showDatePicker(
       context: context,
-      initialDate: selectedDate ?? now,
+      initialDate: _selectedDate ?? now,
       firstDate: now,
       lastDate: DateTime(now.year + 5),
     );
-    if (date != null) setState(() => selectedDate = date);
+    if (date != null) setState(() => _selectedDate = date);
   }
 
   // ────────────────────────────────
-  // 📤 Submit Edited Event
+  // Submit edit
   // ────────────────────────────────
-  Future<void> submitEdit() async {
+  Future<void> _submitEdit() async {
     if (_isSubmitting) return;
 
-    final currentUser = AuthService.instance.currentUser;
-    if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not logged in')),
-      );
+    final user = _auth.currentUser;
+    if (user == null) {
+      _snack('User not logged in');
       return;
     }
 
-    if (currentUser.uid != widget.event.userId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Only the poster can edit this event')),
-      );
+    if (user.uid != widget.event.userId) {
+      _snack('Only the event owner can edit this');
       return;
     }
 
-    if (titleCtrl.text.isEmpty || descCtrl.text.isEmpty || selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields and select a date')),
-      );
+    if (_titleCtrl.text.isEmpty ||
+        _descCtrl.text.isEmpty ||
+        _selectedDate == null) {
+      _snack('Please complete all fields');
       return;
     }
 
     setState(() => _isSubmitting = true);
 
     try {
-      String imageUrl = widget.event.imageUrl;
+      String? imageUrl = widget.event.imageUrl;
 
-      // Upload new image if selected
-      if (imageFile != null) {
+      if (_imageFile != null) {
         imageUrl = await CloudinaryService().uploadFile(
-          imageFile!,
+          _imageFile!,
           folder: 'events',
         );
       }
 
-      final updatedEvent = EventModel(
-        id: widget.event.id,
-        title: titleCtrl.text.trim(),
-        description: descCtrl.text.trim(),
-        imageUrl: imageUrl,
-        date: selectedDate!,
-        createdAt: widget.event.createdAt,
-        userId: widget.event.userId,
-        approved: false, // reset approval
-        likes: widget.event.likes,
-      );
+      final updatedData = {
+        'title': _titleCtrl.text.trim(),
+        'description': _descCtrl.text.trim(),
+        'imageUrl': imageUrl,
+        'eventDate': _selectedDate,
+        'status': 'pending', // ⛔ requires admin re-approval
+        'updatedAt': DateTime.now(),
+      };
 
-      await FirestoreService.instance.updateEvent(updatedEvent);
+      await _firestore.updateEvent(widget.event.id, updatedData);
 
       if (!mounted) return;
 
@@ -118,12 +114,13 @@ class _EditEventPageState extends State<EditEventPage> {
         builder: (_) => AlertDialog(
           title: const Text('Event Updated'),
           content: const Text(
-              'Your changes are waiting for admin approval before appearing publicly.'),
+            'Your changes are waiting for admin approval.',
+          ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // close dialog
-                Navigator.pop(context); // go back
+                Navigator.pop(context);
+                Navigator.pop(context);
               },
               child: const Text('OK'),
             ),
@@ -131,66 +128,75 @@ class _EditEventPageState extends State<EditEventPage> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update event: $e')),
-      );
+      _snack('Failed to update event: $e');
     } finally {
       setState(() => _isSubmitting = false);
     }
   }
 
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Edit Event")),
+      appBar: AppBar(title: const Text('Edit Event')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
           child: Column(
             children: [
               TextField(
-                controller: titleCtrl,
-                decoration: const InputDecoration(labelText: "Event Title"),
+                controller: _titleCtrl,
+                decoration: const InputDecoration(labelText: 'Event Title'),
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: descCtrl,
+                controller: _descCtrl,
                 maxLines: 4,
-                decoration: const InputDecoration(labelText: "Description"),
+                decoration: const InputDecoration(labelText: 'Description'),
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: Text(selectedDate != null
-                        ? 'Event Date: ${selectedDate!.toLocal().toString().split(' ')[0]}'
-                        : 'No date selected'),
+                    child: Text(
+                      _selectedDate != null
+                          ? 'Event Date: ${_selectedDate!.toLocal().toString().split(' ')[0]}'
+                          : 'No date selected',
+                    ),
                   ),
                   TextButton(
-                    onPressed: pickDate,
+                    onPressed: _pickDate,
                     child: const Text('Pick Date'),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
               GestureDetector(
-                onTap: pickImage,
+                onTap: _pickImage,
                 child: Container(
                   height: 150,
                   width: double.infinity,
                   color: Colors.grey[300],
-                  child: imageFile != null
-                      ? Image.file(imageFile!, fit: BoxFit.cover)
-                      : widget.event.imageUrl.isNotEmpty
-                          ? Image.network(widget.event.imageUrl, fit: BoxFit.cover)
-                          : const Center(child: Text("Tap to pick an image")),
+                  child: _imageFile != null
+                      ? Image.file(_imageFile!, fit: BoxFit.cover)
+                      : (widget.event.imageUrl != null &&
+                              widget.event.imageUrl!.isNotEmpty)
+                          ? Image.network(widget.event.imageUrl!,
+                              fit: BoxFit.cover)
+                          : const Center(child: Text('Tap to pick image')),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _isSubmitting ? null : submitEdit,
-                child: Text(_isSubmitting ? "Submitting..." : "Submit Changes"),
+                onPressed: _isSubmitting ? null : _submitEdit,
+                child: Text(
+                  _isSubmitting ? 'Submitting...' : 'Submit Changes',
+                ),
               ),
             ],
           ),

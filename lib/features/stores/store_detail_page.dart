@@ -1,11 +1,11 @@
-// lib/features/stores/store_detail_page.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/firestore_service.dart';
-import '../../models/store_model.dart' as sm;
+import '../../core/utils/helpers.dart';
+import '../../models/store_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class StoreDetailPage extends StatefulWidget {
-  final sm.StoreModel store;
+  final StoreModel store;
   const StoreDetailPage({super.key, required this.store});
 
   @override
@@ -13,105 +13,94 @@ class StoreDetailPage extends StatefulWidget {
 }
 
 class _StoreDetailPageState extends State<StoreDetailPage> {
-  final FirestoreService _service = FirestoreService.instance;
-  final TextEditingController _commentCtrl = TextEditingController();
-  num _selectedRating = 0;
+  final _commentController = TextEditingController();
+  double _rating = 0;
+
+  bool get isOwnerOrAdmin =>
+      widget.store.ownerId == Helpers.currentUserId() || Helpers.isAdmin();
+
+  Future<void> _addComment() async {
+    if (_commentController.text.trim().isEmpty) return;
+
+    final comment = CommentModel(
+      id: const Uuid().v4(),
+      userId: Helpers.currentUserId(),
+      text: _commentController.text.trim(),
+      rating: _rating,
+      createdAt: Timestamp.now(),
+    );
+
+    await FirestoreService.instance.addComment(widget.store.id, comment);
+    if (_rating > 0) await FirestoreService.instance.rateStore(widget.store.id, _rating);
+
+    _commentController.clear();
+    setState(() => _rating = 0);
+  }
+
+  Future<void> _reportStore() async {
+    await FirestoreService.instance.reportStore(widget.store.id, Helpers.currentUserId());
+    Helpers.showSnackBar(context, 'Store reported.');
+  }
+
+  Future<void> _deleteStore() async {
+    await FirestoreService.instance.deleteStore(widget.store.id);
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.store;
-    final user = FirebaseAuth.instance.currentUser;
-
+    final store = widget.store;
     return Scaffold(
-      appBar: AppBar(title: Text(s.name)),
-      body: SingleChildScrollView(
-        child: Column(
+      appBar: AppBar(
+        title: Text(store.name),
+        actions: [
+          if (isOwnerOrAdmin)
+            IconButton(
+              icon: Icon(Icons.delete),
+              onPressed: _deleteStore,
+            ),
+          IconButton(icon: Icon(Icons.report), onPressed: _reportStore),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
           children: [
-            if (s.images.isNotEmpty) AspectRatio(aspectRatio: 16/9, child: Image.network(s.images.first, fit: BoxFit.cover)),
-            Padding(padding: const EdgeInsets.all(16.0), child: Text(s.description ?? '')),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text('Rating: ${s.averageRating.toStringAsFixed(1)}'),
-                  const SizedBox(width: 12),
-                  for (var i = 1; i <= 5; i++)
-                    IconButton(
-                      icon: Icon(Icons.star, color: (_selectedRating >= i) ? Colors.amber : Colors.grey),
-                      onPressed: () async {
-                        if (user == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login first')));
-                          return;
-                        }
-                        await _service.rateStore(s.id, user.uid, i);
-                        setState(() => _selectedRating = i);
-                      },
-                    ),
-                ],
-              ),
+            Text('Type: ${store.type}'),
+            Text('Barangay: ${store.barangay}'),
+            Text('Rating: ${store.rating.toStringAsFixed(1)} (${store.ratingCount} ratings)'),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              icon: Icon(Icons.map),
+              label: Text('Open in Maps'),
+              onPressed: () => Helpers.openMap(store.location.latitude, store.location.longitude),
             ),
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text('Comments', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 32),
+            Text('Comments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 8),
+            ...store.comments.map((c) => ListTile(
+                  title: Text(c.text),
+                  subtitle: Text('Rating: ${c.rating}'),
+                )),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _commentController,
+              decoration: InputDecoration(labelText: 'Add a comment'),
             ),
-            const SizedBox(height: 8),
-            ...s.comments.map((c) {
-              final likes = c.likes.length;
-              final dislikes = c.dislikes.length;
-              return ListTile(
-                title: Text(c.uid),
-                subtitle: Text(c.content),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('$likes'),
-                  IconButton(
-                    icon: const Icon(Icons.thumb_up_alt_outlined),
-                    onPressed: () async {
-                      if (user == null) return;
-                      await _service.toggleCommentLikeForStore(storeId: s.id, commentIdOrKey: c.id ?? '${c.uid}_${c.timestamp}', userId: user.uid);
-                      setState(() {});
-                    },
-                  ),
-                  Text('$dislikes'),
-                  IconButton(
-                    icon: const Icon(Icons.thumb_down_alt_outlined),
-                    onPressed: () async {
-                      if (user == null) return;
-                      await _service.toggleCommentDislikeForStore(storeId: s.id, commentIdOrKey: c.id ?? '${c.uid}_${c.timestamp}', userId: user.uid);
-                      setState(() {});
-                    },
-                  ),
-                ]),
-              );
-            }),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(children: [
-                Expanded(child: TextField(controller: _commentCtrl, decoration: const InputDecoration(hintText: 'Write a comment'))),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: () async {
-                    if (user == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login first')));
-                      return;
-                    }
-                    final comment = sm.CommentModel(
-                      id: null,
-                      uid: user.uid,
-                      content: _commentCtrl.text,
-                      timestamp: DateTime.now(),
-                      likes: [],
-                      dislikes: [],
-                    );
-                    await _service.addCommentToStore(s.id, comment);
-                    _commentCtrl.clear();
-                    setState(() {});
-                  },
+            Row(
+              children: [
+                Text('Rating:'),
+                Slider(
+                  value: _rating,
+                  onChanged: (v) => setState(() => _rating = v),
+                  min: 0,
+                  max: 5,
+                  divisions: 5,
+                  label: _rating.toString(),
                 ),
-              ]),
+              ],
             ),
-            const SizedBox(height: 24),
+            ElevatedButton(onPressed: _addComment, child: Text('Submit')),
           ],
         ),
       ),
