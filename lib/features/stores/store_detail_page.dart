@@ -1,3 +1,4 @@
+// lib\features\stores\store_detail_page.dart
 import 'package:flutter/material.dart';
 import '../../core/services/firestore_service.dart';
 import '../../core/utils/helpers.dart';
@@ -23,14 +24,14 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
     if (_commentController.text.trim().isEmpty) return;
 
     final comment = CommentModel(
-      id: const Uuid().v4(),
+      id: FirebaseFirestore.instance.collection('tmp').doc().id,
       userId: Helpers.currentUserId(),
       text: _commentController.text.trim(),
       rating: _rating,
       createdAt: Timestamp.now(),
     );
 
-    await FirestoreService.instance.addComment(widget.store.id, comment);
+    await FirestoreService.instance.addStoreComment(widget.store.id, comment);
     if (_rating > 0) await FirestoreService.instance.rateStore(widget.store.id, _rating);
 
     _commentController.clear();

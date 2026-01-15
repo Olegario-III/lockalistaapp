@@ -105,7 +105,7 @@ class _EditEventPageState extends State<EditEventPage> {
         'updatedAt': DateTime.now(),
       };
 
-      await _firestore.updateEvent(widget.event.id, updatedData);
+      await _firestore.updateEventFields(widget.event.id, updatedData);
 
       if (!mounted) return;
 
