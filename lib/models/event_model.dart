@@ -49,6 +49,8 @@ class EventModel {
   final String userId;
   final String? imageUrl;
   final DateTime createdAt;
+  final DateTime startDate; // 🔹 new
+  final DateTime endDate;   // 🔹 new
   final String status;
   final List<String> likesList;
   final int likesCount;
@@ -61,6 +63,8 @@ class EventModel {
     required this.userId,
     this.imageUrl,
     required this.createdAt,
+    required this.startDate,
+    required this.endDate,
     required this.status,
     required this.likesList,
     required this.likesCount,
@@ -75,6 +79,8 @@ class EventModel {
       userId: map['userId'] ?? '',
       imageUrl: map['imageUrl'],
       createdAt: (map['createdAt'] as Timestamp).toDate(),
+      startDate: (map['startDate'] as Timestamp).toDate(), // 🔹 new
+      endDate: (map['endDate'] as Timestamp).toDate(),     // 🔹 new
       status: map['status'] ?? 'pending',
       likesList: List<String>.from(map['likesList'] ?? []),
       likesCount: map['likesCount'] ?? 0,
@@ -91,6 +97,8 @@ class EventModel {
       'userId': userId,
       'imageUrl': imageUrl,
       'createdAt': Timestamp.fromDate(createdAt),
+      'startDate': Timestamp.fromDate(startDate), // 🔹 new
+      'endDate': Timestamp.fromDate(endDate),     // 🔹 new
       'status': status,
       'likesList': likesList,
       'likesCount': likesCount,

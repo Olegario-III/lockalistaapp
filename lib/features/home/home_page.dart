@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/services/auth_service.dart';
 import '../stores/store_list_page.dart';
 import '../events/event_list_page.dart';
+import '../events/add_event_page.dart';
+import '../stores/add_store_page.dart';
 import '../search/search_page.dart';
 import '../profile/profile_page.dart';
 import '../admin/admin_dashboard_page.dart';
@@ -26,9 +28,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // Use EventListWidget instead of EventListPage Scaffold
+    // Setup pages
     _pages = [
-      EventListWidget(),
+      EventListPage(),
       StoreListPage(),
       SearchPage(),
       ProfilePage(),
@@ -56,8 +58,13 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // The body changes based on the selected tab
+      // Main body
       body: _pages[_currentIndex],
+
+      // Floating Action Button for Add Event / Add Store
+      floatingActionButton: _buildFAB(context),
+
+      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -87,5 +94,42 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  /// Returns the FAB depending on selected tab
+  Widget? _buildFAB(BuildContext context) {
+    final user = _auth.currentUser;
+    if (user == null) return null; // Not logged in, no FAB
+
+    // Events tab
+    if (_currentIndex == 0) {
+      return FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddEventPage()),
+          );
+        },
+        child: const Icon(Icons.add),
+        tooltip: 'Add Event (Pending Approval)',
+      );
+    }
+
+    // Stores tab
+    if (_currentIndex == 1) {
+      return FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddStorePage()),
+          );
+        },
+        child: const Icon(Icons.add_business),
+        tooltip: 'Add Store (Pending Approval)',
+      );
+    }
+
+    // No FAB for other tabs
+    return null;
   }
 }

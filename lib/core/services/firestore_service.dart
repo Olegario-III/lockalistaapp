@@ -108,13 +108,18 @@ Future<void> reportStore(String storeId, String userId) async {
 }
 
   /// ================================
-  /// 📅 EVENTS
-  /// ================================
+/// 📅 EVENTS
+/// ================================
 
-  Future<List<event.EventModel>> getEvents() async {
-    final snapshot = await _db.collection('events').get();
+  /// Get all events (optionally filter by status)
+  Future<List<event.EventModel>> getEvents({String? status}) async {
+    Query query = _db.collection('events');
+    if (status != null) {
+      query = query.where('status', isEqualTo: status); // ✅ filter by pending/approved
+    }
+    final snapshot = await query.orderBy('startDate').get(); // sort by upcoming
     return snapshot.docs
-        .map((doc) => event.EventModel.fromMap(doc.data(), doc.id))
+        .map((doc) => event.EventModel.fromMap(doc.data()! as Map<String, dynamic>, doc.id))
         .toList();
   }
 
@@ -124,28 +129,30 @@ Future<void> reportStore(String storeId, String userId) async {
     return event.EventModel.fromMap(doc.data()!, doc.id);
   }
 
-  /// 🔹 Used when ID is NOT important
-  Future<void> addEvent(event.EventModel event) async {
-    await _db.collection('events').add(event.toMap());
+  /// Add event with auto-generated ID
+  Future<void> addEvent(event.EventModel eventModel) async {
+    await _db.collection('events').add(eventModel.toMap());
   }
 
-  /// 🔹 Used when ID is pre-generated (recommended)
-  Future<void> addEventWithId(event.EventModel event) async {
-    await _db.collection('events').doc(event.id).set(event.toMap());
+  /// Add event with pre-generated ID
+  Future<void> addEventWithId(event.EventModel eventModel) async {
+    await _db.collection('events').doc(eventModel.id).set(eventModel.toMap());
   }
 
-  Future<void> updateEvent(String id, event.EventModel event) async {
-    await _db.collection('events').doc(id).update(event.toMap());
+  Future<void> updateEvent(String id, event.EventModel eventModel) async {
+    await _db.collection('events').doc(id).update(eventModel.toMap());
   }
 
   Future<void> deleteEvent(String id) async {
     await _db.collection('events').doc(id).delete();
   }
 
+  /// Stream events by status (e.g., approved/pending)
   Stream<List<event.EventModel>> getEventsStream({required String status}) {
     return _db
         .collection('events')
-        .where('approved', isEqualTo: status == 'approved')
+        .where('status', isEqualTo: status) // ✅ fixed field from 'approved'
+        .orderBy('startDate') // ✅ upcoming events first
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -154,126 +161,125 @@ Future<void> reportStore(String storeId, String userId) async {
         );
   }
 
+  /// Approve pending event
   Future<void> approveEvent(String id) async {
-    await _db.collection('events').doc(id).update({'approved': true});
+    await _db.collection('events').doc(id).update({'status': 'approved'});
   }
 
-  /// 🔄 Partial update (used for editing)
-Future<void> updateEventFields(
-  String eventId,
-  Map<String, dynamic> data,
-) async {
-  await _db.collection('events').doc(eventId).update(data);
-}
+  /// Partial update (editing)
+  Future<void> updateEventFields(String eventId, Map<String, dynamic> data) async {
+    await _db.collection('events').doc(eventId).update(data);
+  }
 
+  /// Like/unlike event
   Future<void> likeEvent(String eventId, String userId) async {
-  final ref = _db.collection('events').doc(eventId);
+    final ref = _db.collection('events').doc(eventId);
 
-  await _db.runTransaction((tx) async {
-    final snap = await tx.get(ref);
-    if (!snap.exists) return;
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
 
-    final data = snap.data()!;
-    final List likes = List.from(data['likesList'] ?? []);
-    int likesCount = data['likesCount'] ?? 0;
+      final data = snap.data()!;
+      final List likes = List.from(data['likesList'] ?? []);
+      int likesCount = data['likesCount'] ?? 0;
 
-    if (likes.contains(userId)) {
-      likes.remove(userId);
-      likesCount--;
-    } else {
-      likes.add(userId);
-      likesCount++;
-    }
+      if (likes.contains(userId)) {
+        likes.remove(userId);
+        likesCount--;
+      } else {
+        likes.add(userId);
+        likesCount++;
+      }
 
-    tx.update(ref, {
-      'likesList': likes,
-      'likesCount': likesCount,
+      tx.update(ref, {
+        'likesList': likes,
+        'likesCount': likesCount,
+      });
     });
-  });
-}
+  }
 
-  Future<void> addCommentToEvent(
-  String eventId,
-  event.CommentModel comment,
-) async {
-  final ref = _db.collection('events').doc(eventId);
+  /// Add comment
+  Future<void> addCommentToEvent(String eventId, event.CommentModel comment) async {
+    final ref = _db.collection('events').doc(eventId);
+    await ref.update({
+      'comments': FieldValue.arrayUnion([comment.toMap()]),
+    });
+  }
 
-  await ref.update({
-    'comments': FieldValue.arrayUnion([comment.toMap()]),
-  });
-}
+  /// Toggle comment like
+  Future<void> toggleCommentLike({
+    required String eventId,
+    required String commentId,
+    required String userId,
+  }) async {
+    final ref = _db.collection('events').doc(eventId);
 
-Future<void> toggleCommentLike({
-  required String eventId,
-  required String commentId,
-  required String userId,
-}) async {
-  final ref = _db.collection('events').doc(eventId);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
 
-  await _db.runTransaction((tx) async {
-    final snap = await tx.get(ref);
-    if (!snap.exists) return;
+      final data = snap.data()!;
+      final List comments = List.from(data['comments'] ?? []);
 
-    final data = snap.data()!;
-    final List comments = List.from(data['comments'] ?? []);
+      for (final c in comments) {
+        if (c['id'] == commentId) {
+          final likes = List<String>.from(c['likes'] ?? []);
+          final dislikes = List<String>.from(c['dislikes'] ?? []);
 
-    for (final c in comments) {
-      if (c['id'] == commentId) {
-        final likes = List<String>.from(c['likes'] ?? []);
-        final dislikes = List<String>.from(c['dislikes'] ?? []);
+          if (likes.contains(userId)) {
+            likes.remove(userId);
+          } else {
+            likes.add(userId);
+            dislikes.remove(userId);
+          }
 
-        if (likes.contains(userId)) {
-          likes.remove(userId);
-        } else {
-          likes.add(userId);
-          dislikes.remove(userId);
+          c['likes'] = likes;
+          c['dislikes'] = dislikes;
+          break;
         }
-
-        c['likes'] = likes;
-        c['dislikes'] = dislikes;
-        break;
       }
-    }
 
-    tx.update(ref, {'comments': comments});
-  });
-}
+      tx.update(ref, {'comments': comments});
+    });
+  }
 
+  /// Toggle comment dislike
   Future<void> toggleCommentDislike({
-  required String eventId,
-  required String commentId,
-  required String userId,
-}) async {
-  final ref = _db.collection('events').doc(eventId);
+    required String eventId,
+    required String commentId,
+    required String userId,
+  }) async {
+    final ref = _db.collection('events').doc(eventId);
 
-  await _db.runTransaction((tx) async {
-    final snap = await tx.get(ref);
-    if (!snap.exists) return;
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
 
-    final data = snap.data()!;
-    final List comments = List.from(data['comments'] ?? []);
+      final data = snap.data()!;
+      final List comments = List.from(data['comments'] ?? []);
 
-    for (final c in comments) {
-      if (c['id'] == commentId) {
-        final likes = List<String>.from(c['likes'] ?? []);
-        final dislikes = List<String>.from(c['dislikes'] ?? []);
+      for (final c in comments) {
+        if (c['id'] == commentId) {
+          final likes = List<String>.from(c['likes'] ?? []);
+          final dislikes = List<String>.from(c['dislikes'] ?? []);
 
-        if (dislikes.contains(userId)) {
-          dislikes.remove(userId);
-        } else {
-          dislikes.add(userId);
-          likes.remove(userId);
+          if (dislikes.contains(userId)) {
+            dislikes.remove(userId);
+          } else {
+            dislikes.add(userId);
+            likes.remove(userId);
+          }
+
+          c['likes'] = likes;
+          c['dislikes'] = dislikes;
+          break;
         }
-
-        c['likes'] = likes;
-        c['dislikes'] = dislikes;
-        break;
       }
-    }
 
-    tx.update(ref, {'comments': comments});
-  });
-}
+      tx.update(ref, {'comments': comments});
+    });
+  }
+
 
   /// ================================
   /// 👤 USERS
@@ -299,4 +305,41 @@ Future<void> toggleCommentLike({
   Future<void> deleteUser(String id) async {
     await _db.collection('users').doc(id).delete();
   }
+
+    /// ================================
+  /// 🔍 SEARCH
+  /// ================================
+
+  Future<List<event.EventModel>> searchEvents(String query) async {
+    final q = query.toLowerCase();
+
+    final snap = await _db
+        .collection('events')
+        .where('approved', isEqualTo: true)
+        .get();
+
+    return snap.docs
+        .map((d) => event.EventModel.fromMap(d.data(), d.id))
+        .where((e) =>
+            e.title.toLowerCase().contains(q) ||
+            e.description.toLowerCase().contains(q))
+        .toList();
+  }
+
+  Future<List<store.StoreModel>> searchStores(String query) async {
+    final q = query.toLowerCase();
+
+    final snap = await _db
+        .collection('stores')
+        .where('approved', isEqualTo: true)
+        .get();
+
+    return snap.docs
+        .map((d) => store.StoreModel.fromMap(d.data(), d.id))
+        .where((s) =>
+            s.name.toLowerCase().contains(q) ||
+            (s.description ?? '').toLowerCase().contains(q))
+        .toList();
+  }
 }
+

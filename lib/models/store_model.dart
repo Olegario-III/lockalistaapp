@@ -3,17 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class StoreModel {
   final String id;
   final String name;
-  final String type; // pharmacy, resort, grocery, sari-sari store, karenderya, others
+  final String type; // pharmacy, resort, grocery, etc.
   final String barangay;
-  final String? address; // added optional address
-  final GeoPoint location; // Firestore geo coordinates
+  final String? address;
+  final GeoPoint location;
   final String ownerId;
   final bool approved;
   final List<String> reportedBy;
-  final double rating;
-  final int ratingCount;
+  final double rating;        // total rating score
+  final int ratingCount;      // number of ratings
   final List<CommentModel> comments;
   final String? description;
+
+  // ✅ NEW
+  final List<String> images;
 
   StoreModel({
     required this.id,
@@ -29,7 +32,12 @@ class StoreModel {
     this.ratingCount = 0,
     this.comments = const [],
     this.description,
+    this.images = const [],
   });
+
+  /// ✅ Computed value used by UI
+  double get averageRating =>
+      ratingCount == 0 ? 0.0 : rating / ratingCount;
 
   factory StoreModel.fromMap(Map<String, dynamic> map, String id) {
     return StoreModel(
@@ -37,17 +45,17 @@ class StoreModel {
       name: map['name'] ?? '',
       type: map['type'] ?? '',
       barangay: map['barangay'] ?? '',
-      address: map['address'], // new field
+      address: map['address'],
       location: map['location'] as GeoPoint,
       ownerId: map['ownerId'] ?? '',
       approved: map['approved'] ?? false,
       reportedBy: List<String>.from(map['reportedBy'] ?? []),
       rating: (map['rating'] ?? 0).toDouble(),
       ratingCount: map['ratingCount'] ?? 0,
-      comments: map['comments'] != null
-          ? List<CommentModel>.from(
-              (map['comments'] as List).map((c) => CommentModel.fromMap(c)))
-          : [],
+      images: List<String>.from(map['images'] ?? []),
+      comments: (map['comments'] as List<dynamic>? ?? [])
+          .map((c) => CommentModel.fromMap(c))
+          .toList(),
       description: map['description'],
     );
   }
@@ -57,13 +65,14 @@ class StoreModel {
       'name': name,
       'type': type,
       'barangay': barangay,
-      'address': address, // new field
+      'address': address,
       'location': location,
       'ownerId': ownerId,
       'approved': approved,
       'reportedBy': reportedBy,
       'rating': rating,
       'ratingCount': ratingCount,
+      'images': images,
       'comments': comments.map((c) => c.toMap()).toList(),
       'description': description,
     };

@@ -21,6 +21,9 @@ class _AddEventPageState extends State<AddEventPage> {
   final TextEditingController titleCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
 
+  DateTime? _startDate;
+  DateTime? _endDate;
+
   File? imageFile;
   final picker = ImagePicker();
   bool _isSubmitting = false;
@@ -35,14 +38,49 @@ class _AddEventPageState extends State<AddEventPage> {
   }
 
   // ────────────────────────────────
+  // 📅 Pick start date
+  // ────────────────────────────────
+  Future<void> pickStartDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) setState(() => _startDate = date);
+  }
+
+  // ────────────────────────────────
+  // 📅 Pick end date
+  // ────────────────────────────────
+  Future<void> pickEndDate() async {
+    if (_startDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pick a start date first')),
+      );
+      return;
+    }
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _startDate!,
+      firstDate: _startDate!,
+      lastDate: DateTime(2100),
+    );
+    if (date != null) setState(() => _endDate = date);
+  }
+
+  // ────────────────────────────────
   // 📤 Submit Event
   // ────────────────────────────────
   Future<void> submitEvent() async {
     if (_isSubmitting) return;
 
-    if (titleCtrl.text.trim().isEmpty || descCtrl.text.trim().isEmpty) {
+    if (titleCtrl.text.trim().isEmpty ||
+        descCtrl.text.trim().isEmpty ||
+        _startDate == null ||
+        _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Title and description are required')),
+        const SnackBar(content: Text('All fields including dates are required')),
       );
       return;
     }
@@ -54,7 +92,6 @@ class _AddEventPageState extends State<AddEventPage> {
 
     try {
       String? imageUrl;
-
       if (imageFile != null) {
         imageUrl = await CloudinaryService().uploadFile(
           imageFile!,
@@ -75,6 +112,8 @@ class _AddEventPageState extends State<AddEventPage> {
         likesList: [],
         likesCount: 0,
         comments: [],
+        startDate: _startDate!,
+        endDate: _endDate!,
       );
 
       await FirestoreService.instance.addEvent(event);
@@ -127,6 +166,28 @@ class _AddEventPageState extends State<AddEventPage> {
                 controller: descCtrl,
                 maxLines: 4,
                 decoration: const InputDecoration(labelText: 'Description'),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: pickStartDate,
+                      child: Text(_startDate == null
+                          ? 'Pick Start Date'
+                          : 'Start: ${_startDate!.toLocal().toString().split(' ')[0]}'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: pickEndDate,
+                      child: Text(_endDate == null
+                          ? 'Pick End Date'
+                          : 'End: ${_endDate!.toLocal().toString().split(' ')[0]}'),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               GestureDetector(
