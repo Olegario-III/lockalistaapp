@@ -11,24 +11,64 @@ class ApprovalStoresPage extends StatelessWidget {
     final firestore = FirestoreService.instance;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Approve Stores")),
+      appBar: AppBar(title: const Text('Approve Stores')),
       body: StreamBuilder<List<StoreModel>>(
-        stream: firestore.getStoresStream(status: 'pending'),
+        stream: firestore.getPendingStoresStream(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final stores = snapshot.data!;
-          if (stores.isEmpty) return const Center(child: Text("No stores to approve."));
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Error: ${snapshot.error}'),
+            );
+          }
+
+          final stores = snapshot.data ?? [];
+
+          if (stores.isEmpty) {
+            return const Center(
+              child: Text('No stores waiting for approval.'),
+            );
+          }
 
           return ListView.builder(
             itemCount: stores.length,
             itemBuilder: (context, index) {
-              final s = stores[index];
-              return ListTile(
-                title: Text(s.name),
-                subtitle: Text(s.description ?? "No description provided"),
-                trailing: IconButton(
-                  icon: const Icon(Icons.check, color: Colors.green),
-                  onPressed: () => firestore.approveStore(s.id),
+              final store = stores[index];
+
+              return Card(
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                child: ListTile(
+                  title: Text(store.name),
+                  subtitle: Text(
+                    'Type: ${store.type}\nBarangay: ${store.barangay}',
+                  ),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      /// ❌ Reject
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () {
+                          firestore.rejectStore(store.id);
+                        },
+                      ),
+
+                      /// ✅ Approve
+                      IconButton(
+                        icon: const Icon(Icons.check, color: Colors.green),
+                        onPressed: () {
+                          firestore.approveStore(store.id);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               );
             },

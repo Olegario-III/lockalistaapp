@@ -1,9 +1,8 @@
-// lib/models/event_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CommentModel {
   final String id;
-  final String uid;
+  final String userId; // ✅ renamed from uid
   final String content;
   final DateTime timestamp;
   final List<String> likes;
@@ -11,7 +10,7 @@ class CommentModel {
 
   CommentModel({
     required this.id,
-    required this.uid,
+    required this.userId,
     required this.content,
     required this.timestamp,
     List<String>? likes,
@@ -22,7 +21,7 @@ class CommentModel {
   factory CommentModel.fromMap(Map<String, dynamic> map) {
     return CommentModel(
       id: map['id'] ?? '',
-      uid: map['uid'] ?? '',
+      userId: map['userId'] ?? '',
       content: map['content'] ?? '',
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       likes: List<String>.from(map['likes'] ?? []),
@@ -33,7 +32,7 @@ class CommentModel {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'uid': uid,
+      'userId': userId,
       'content': content,
       'timestamp': Timestamp.fromDate(timestamp),
       'likes': likes,
@@ -46,12 +45,15 @@ class EventModel {
   final String id;
   final String title;
   final String description;
-  final String userId;
+  final String ownerId; // Poster UID
+  final String? ownerAvatarUrl;
   final String? imageUrl;
-  final DateTime createdAt;
-  final DateTime startDate; // 🔹 new
-  final DateTime endDate;   // 🔹 new
+  final DateTime? timestamp;
+  final DateTime startDate;
+  final DateTime endDate;
   final String status;
+  final String? approvedBy; // Admin UID
+  final String? approvedByName;
   final List<String> likesList;
   final int likesCount;
   final List<CommentModel> comments;
@@ -60,12 +62,15 @@ class EventModel {
     required this.id,
     required this.title,
     required this.description,
-    required this.userId,
+    required this.ownerId,
+    this.ownerAvatarUrl,
     this.imageUrl,
-    required this.createdAt,
+    this.timestamp,
     required this.startDate,
     required this.endDate,
     required this.status,
+    this.approvedBy,
+    this.approvedByName,
     required this.likesList,
     required this.likesCount,
     required this.comments,
@@ -76,12 +81,17 @@ class EventModel {
       id: id,
       title: map['title'] ?? '',
       description: map['description'] ?? '',
-      userId: map['userId'] ?? '',
+      ownerId: map['ownerId'] ?? '',
+      ownerAvatarUrl: map['ownerAvatarUrl'],
       imageUrl: map['imageUrl'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      startDate: (map['startDate'] as Timestamp).toDate(), // 🔹 new
-      endDate: (map['endDate'] as Timestamp).toDate(),     // 🔹 new
+      timestamp: map['createdAt'] != null
+          ? (map['createdAt'] as Timestamp).toDate()
+          : null,
+      startDate: (map['startDate'] as Timestamp).toDate(),
+      endDate: (map['endDate'] as Timestamp).toDate(),
       status: map['status'] ?? 'pending',
+      approvedBy: map['approvedBy'],
+      approvedByName: map['approvedByName'],
       likesList: List<String>.from(map['likesList'] ?? []),
       likesCount: map['likesCount'] ?? 0,
       comments: (map['comments'] as List<dynamic>? ?? [])
@@ -94,12 +104,15 @@ class EventModel {
     return {
       'title': title,
       'description': description,
-      'userId': userId,
+      'ownerId': ownerId,
+      'ownerAvatarUrl': ownerAvatarUrl,
       'imageUrl': imageUrl,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'startDate': Timestamp.fromDate(startDate), // 🔹 new
-      'endDate': Timestamp.fromDate(endDate),     // 🔹 new
+      'createdAt': timestamp != null ? Timestamp.fromDate(timestamp!) : null,
+      'startDate': Timestamp.fromDate(startDate),
+      'endDate': Timestamp.fromDate(endDate),
       'status': status,
+      'approvedBy': approvedBy,
+      'approvedByName': approvedByName,
       'likesList': likesList,
       'likesCount': likesCount,
       'comments': comments.map((c) => c.toMap()).toList(),

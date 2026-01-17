@@ -1,3 +1,4 @@
+// lib\features\admin\approved\approved_stores_page.dart
 import 'package:flutter/material.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../models/store_model.dart';
@@ -12,7 +13,7 @@ class ApprovedStoresPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Approved Stores")),
       body: StreamBuilder<List<StoreModel>>(
-        stream: firestore.getStoresStream(status: 'approved'),
+        stream: firestore.getApprovedStoresStream(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final stores = snapshot.data!;

@@ -13,7 +13,7 @@ class StoreListPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Stores')),
       body: StreamBuilder<List<sm.StoreModel>>(
-        stream: _service.getStoresStream(status: 'approved'),
+        stream: _service.getApprovedStoresStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

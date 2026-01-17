@@ -23,51 +23,88 @@ class FirestoreService {
   }
 
   /// ================================
-  /// 🏪 STORES
-  /// ================================
+/// 🏪 STORES
+/// ================================
 
-  Future<List<store.StoreModel>> getStores() async {
-    final snapshot = await _db.collection('stores').get();
-    return snapshot.docs
-        .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
-        .toList();
-  }
+/// Get ALL stores (admin use)
+Future<List<store.StoreModel>> getStores() async {
+  final snapshot = await _db.collection('stores').get();
+  return snapshot.docs
+      .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
+      .toList();
+}
 
-  Future<store.StoreModel?> getStoreById(String id) async {
-    final doc = await _db.collection('stores').doc(id).get();
-    if (!doc.exists) return null;
-    return store.StoreModel.fromMap(doc.data()!, doc.id);
-  }
+/// Get ONLY approved stores (public)
+Stream<List<store.StoreModel>> getApprovedStoresStream() {
+  return _db
+      .collection('stores')
+      .where('status', isEqualTo: 'approved')
+      .snapshots()
+      .map(
+        (snapshot) => snapshot.docs
+            .map((doc) =>
+                store.StoreModel.fromMap(doc.data(), doc.id))
+            .toList(),
+      );
+}
 
-  Future<void> addStore(store.StoreModel store) async {
-    await _db.collection('stores').add(store.toMap());
-  }
+/// Get ONLY pending stores (admin dashboard)
+Stream<List<store.StoreModel>> getPendingStoresStream() {
+  return _db
+      .collection('stores')
+      .where('status', isEqualTo: 'pending')
+      .snapshots()
+      .map(
+        (snapshot) => snapshot.docs
+            .map((doc) =>
+                store.StoreModel.fromMap(doc.data(), doc.id))
+            .toList(),
+      );
+}
 
-  Future<void> updateStore(String id, store.StoreModel store) async {
-    await _db.collection('stores').doc(id).update(store.toMap());
-  }
+/// Get store by ID
+Future<store.StoreModel?> getStoreById(String id) async {
+  final doc = await _db.collection('stores').doc(id).get();
+  if (!doc.exists) return null;
+  return store.StoreModel.fromMap(doc.data()!, doc.id);
+}
 
-  Future<void> deleteStore(String id) async {
-    await _db.collection('stores').doc(id).delete();
-  }
+/// Add store (AUTO pending)
+Future<void> addStore(store.StoreModel store) async {
+  await _db.collection('stores').add({
+    ...store.toMap(),
+    'status': 'pending',
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
 
-  Stream<List<store.StoreModel>> getStoresStream({required String status}) {
-    return _db
-        .collection('stores')
-        .where('approved', isEqualTo: status == 'approved')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
-  }
+/// Update store (edit)
+Future<void> updateStore(String id, store.StoreModel store) async {
+  await _db.collection('stores').doc(id).update(store.toMap());
+}
 
-  Future<void> approveStore(String id) async {
-    await _db.collection('stores').doc(id).update({'approved': true});
-  }
+/// Delete store
+Future<void> deleteStore(String id) async {
+  await _db.collection('stores').doc(id).delete();
+}
 
-  Future<void> addStoreComment(
+/// ✅ Admin approves store
+Future<void> approveStore(String id) async {
+  await _db.collection('stores').doc(id).update({
+    'status': 'approved',
+    'approvedAt': FieldValue.serverTimestamp(),
+  });
+}
+
+/// ❌ Admin rejects store
+Future<void> rejectStore(String id) async {
+  await _db.collection('stores').doc(id).update({
+    'status': 'rejected',
+  });
+}
+
+/// 💬 Add comment to store
+Future<void> addStoreComment(
   String storeId,
   store.CommentModel comment,
 ) async {
@@ -76,7 +113,8 @@ class FirestoreService {
   });
 }
 
-  Future<void> rateStore(String storeId, double rating) async {
+/// ⭐ Rate store (average rating logic)
+Future<void> rateStore(String storeId, double rating) async {
   final ref = _db.collection('stores').doc(storeId);
 
   await _db.runTransaction((tx) async {
@@ -84,7 +122,8 @@ class FirestoreService {
     if (!snap.exists) return;
 
     final data = snap.data()!;
-    final double currentRating = (data['rating'] ?? 0).toDouble();
+    final double currentRating =
+        (data['rating'] ?? 0).toDouble();
     final int count = (data['ratingCount'] ?? 0);
 
     final newCount = count + 1;
@@ -98,187 +137,243 @@ class FirestoreService {
   });
 }
 
+/// 🚨 Report store
 Future<void> reportStore(String storeId, String userId) async {
   await _db.collection('reports').add({
     'storeId': storeId,
     'reportedBy': userId,
-    'createdAt': FieldValue.serverTimestamp(),
     'type': 'store',
+    'createdAt': FieldValue.serverTimestamp(),
   });
 }
 
-  /// ================================
+ /// ================================
 /// 📅 EVENTS
 /// ================================
 
-  /// Get all events (optionally filter by status)
-  Future<List<event.EventModel>> getEvents({String? status}) async {
-    Query query = _db.collection('events');
-    if (status != null) {
-      query = query.where('status', isEqualTo: status); // ✅ filter by pending/approved
+/// Stream of a single event (live updates)
+Stream<event.EventModel> getEventStream(String eventId) {
+  return _db.collection('events').doc(eventId).snapshots().map(
+        (doc) => event.EventModel.fromMap(doc.data()!, doc.id),
+      );
+}
+
+/// Get username by Firebase UID
+Future<String> getUserName(String userId) async {
+  final doc = await _db.collection('users').doc(userId).get();
+  if (!doc.exists) return 'Unknown';
+  return (doc.data()?['name'] ?? 'No Name') as String;
+}
+
+/// Get all events (optional filter by status)
+Future<List<event.EventModel>> getEvents({String? status}) async {
+  Query query = _db.collection('events');
+  if (status != null) query = query.where('status', isEqualTo: status);
+
+  final snapshot = await query.orderBy('startDate').get();
+  return snapshot.docs
+      .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+      .toList();
+}
+
+/// Get single event
+Future<event.EventModel?> getEventById(String id) async {
+  final doc = await _db.collection('events').doc(id).get();
+  if (!doc.exists) return null;
+  return event.EventModel.fromMap(doc.data()!, doc.id);
+}
+
+/// Add event → always pending
+Future<DocumentReference> addEvent(event.EventModel eventModel, String ownerId, {String? ownerAvatarUrl}) async {
+  return await _db.collection('events').add({
+    ...eventModel.toMap(),
+    'ownerId': ownerId,
+    'ownerAvatarUrl': ownerAvatarUrl ?? '',
+    'status': 'pending',
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+/// Add event with pre-generated ID
+Future<void> addEventWithId(event.EventModel eventModel, String ownerId, {String? ownerAvatarUrl}) async {
+  await _db.collection('events').doc(eventModel.id).set({
+    ...eventModel.toMap(),
+    'ownerId': ownerId,
+    'ownerAvatarUrl': ownerAvatarUrl ?? '',
+    'status': 'pending',
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+/// Update full event
+Future<void> updateEvent(String id, event.EventModel eventModel) async {
+  await _db.collection('events').doc(id).update(eventModel.toMap());
+}
+
+/// Partial update
+Future<void> updateEventFields(String eventId, Map<String, dynamic> data) async {
+  await _db.collection('events').doc(eventId).update(data);
+}
+
+/// Delete event
+Future<void> deleteEvent(String id) async {
+  await _db.collection('events').doc(id).delete();
+}
+
+/// Approved events (public)
+Stream<List<event.EventModel>> getApprovedEventsStream() {
+  return _db
+      .collection('events')
+      .where('status', isEqualTo: 'approved')
+      .orderBy('startDate')
+      .snapshots()
+      .map((snapshot) => snapshot.docs
+          .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList());
+}
+
+/// Pending events (admin)
+Stream<List<event.EventModel>> getPendingEventsStream() {
+  return _db
+      .collection('events')
+      .where('status', isEqualTo: 'pending')
+      .orderBy('createdAt', descending: true)
+      .snapshots()
+      .map((snapshot) => snapshot.docs
+          .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList());
+}
+
+/// Generic status stream
+Stream<List<event.EventModel>> getEventsStream({required String status}) {
+  return _db
+      .collection('events')
+      .where('status', isEqualTo: status)
+      .orderBy('startDate')
+      .snapshots()
+      .map((snapshot) => snapshot.docs
+          .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .toList());
+}
+
+/// ✅ ADMIN ACTIONS
+Future<void> approveEvent(String id, {String? adminName, String? adminId}) async {
+  await _db.collection('events').doc(id).update({
+    'status': 'approved',
+    'approvedAt': FieldValue.serverTimestamp(),
+    'approvedBy': adminId ?? '',
+    'approvedByName': adminName ?? '',
+  });
+}
+
+Future<void> rejectEvent(String id, {String? adminName, String? adminId}) async {
+  await _db.collection('events').doc(id).update({
+    'status': 'rejected',
+    'rejectedAt': FieldValue.serverTimestamp(),
+    'approvedBy': adminId ?? '',
+    'approvedByName': adminName ?? '',
+  });
+}
+
+/// ❤️ LIKES
+Future<void> likeEvent(String eventId, String userId) async {
+  final ref = _db.collection('events').doc(eventId);
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    if (!snap.exists) return;
+
+    final data = snap.data()!;
+    final List likes = List.from(data['likesList'] ?? []);
+    int likesCount = data['likesCount'] ?? 0;
+
+    if (likes.contains(userId)) {
+      likes.remove(userId);
+      likesCount--;
+    } else {
+      likes.add(userId);
+      likesCount++;
     }
-    final snapshot = await query.orderBy('startDate').get(); // sort by upcoming
-    return snapshot.docs
-        .map((doc) => event.EventModel.fromMap(doc.data()! as Map<String, dynamic>, doc.id))
-        .toList();
-  }
 
-  Future<event.EventModel?> getEventById(String id) async {
-    final doc = await _db.collection('events').doc(id).get();
-    if (!doc.exists) return null;
-    return event.EventModel.fromMap(doc.data()!, doc.id);
-  }
+    tx.update(ref, {'likesList': likes, 'likesCount': likesCount});
+  });
+}
 
-  /// Add event with auto-generated ID
-  Future<void> addEvent(event.EventModel eventModel) async {
-    await _db.collection('events').add(eventModel.toMap());
-  }
+/// 💬 COMMENTS
+Future<void> addCommentToEvent(String eventId, event.CommentModel comment) async {
+  await _db.collection('events').doc(eventId).update({
+    'comments': FieldValue.arrayUnion([comment.toMap()]),
+  });
+}
 
-  /// Add event with pre-generated ID
-  Future<void> addEventWithId(event.EventModel eventModel) async {
-    await _db.collection('events').doc(eventModel.id).set(eventModel.toMap());
-  }
+Future<void> toggleCommentLike({
+  required String eventId,
+  required String commentId,
+  required String userId,
+}) async {
+  final ref = _db.collection('events').doc(eventId);
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    if (!snap.exists) return;
 
-  Future<void> updateEvent(String id, event.EventModel eventModel) async {
-    await _db.collection('events').doc(id).update(eventModel.toMap());
-  }
+    final data = snap.data()!;
+    final List comments = List.from(data['comments'] ?? []);
 
-  Future<void> deleteEvent(String id) async {
-    await _db.collection('events').doc(id).delete();
-  }
+    for (final c in comments) {
+      if (c['id'] == commentId) {
+        final likes = List<String>.from(c['likes'] ?? []);
+        final dislikes = List<String>.from(c['dislikes'] ?? []);
 
-  /// Stream events by status (e.g., approved/pending)
-  Stream<List<event.EventModel>> getEventsStream({required String status}) {
-    return _db
-        .collection('events')
-        .where('status', isEqualTo: status) // ✅ fixed field from 'approved'
-        .orderBy('startDate') // ✅ upcoming events first
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => event.EventModel.fromMap(doc.data(), doc.id))
-              .toList(),
-        );
-  }
-
-  /// Approve pending event
-  Future<void> approveEvent(String id) async {
-    await _db.collection('events').doc(id).update({'status': 'approved'});
-  }
-
-  /// Partial update (editing)
-  Future<void> updateEventFields(String eventId, Map<String, dynamic> data) async {
-    await _db.collection('events').doc(eventId).update(data);
-  }
-
-  /// Like/unlike event
-  Future<void> likeEvent(String eventId, String userId) async {
-    final ref = _db.collection('events').doc(eventId);
-
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) return;
-
-      final data = snap.data()!;
-      final List likes = List.from(data['likesList'] ?? []);
-      int likesCount = data['likesCount'] ?? 0;
-
-      if (likes.contains(userId)) {
-        likes.remove(userId);
-        likesCount--;
-      } else {
-        likes.add(userId);
-        likesCount++;
-      }
-
-      tx.update(ref, {
-        'likesList': likes,
-        'likesCount': likesCount,
-      });
-    });
-  }
-
-  /// Add comment
-  Future<void> addCommentToEvent(String eventId, event.CommentModel comment) async {
-    final ref = _db.collection('events').doc(eventId);
-    await ref.update({
-      'comments': FieldValue.arrayUnion([comment.toMap()]),
-    });
-  }
-
-  /// Toggle comment like
-  Future<void> toggleCommentLike({
-    required String eventId,
-    required String commentId,
-    required String userId,
-  }) async {
-    final ref = _db.collection('events').doc(eventId);
-
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) return;
-
-      final data = snap.data()!;
-      final List comments = List.from(data['comments'] ?? []);
-
-      for (final c in comments) {
-        if (c['id'] == commentId) {
-          final likes = List<String>.from(c['likes'] ?? []);
-          final dislikes = List<String>.from(c['dislikes'] ?? []);
-
-          if (likes.contains(userId)) {
-            likes.remove(userId);
-          } else {
-            likes.add(userId);
-            dislikes.remove(userId);
-          }
-
-          c['likes'] = likes;
-          c['dislikes'] = dislikes;
-          break;
+        if (likes.contains(userId)) {
+          likes.remove(userId);
+        } else {
+          likes.add(userId);
+          dislikes.remove(userId);
         }
+
+        c['likes'] = likes;
+        c['dislikes'] = dislikes;
+        break;
       }
+    }
 
-      tx.update(ref, {'comments': comments});
-    });
-  }
+    tx.update(ref, {'comments': comments});
+  });
+}
 
-  /// Toggle comment dislike
-  Future<void> toggleCommentDislike({
-    required String eventId,
-    required String commentId,
-    required String userId,
-  }) async {
-    final ref = _db.collection('events').doc(eventId);
+Future<void> toggleCommentDislike({
+  required String eventId,
+  required String commentId,
+  required String userId,
+}) async {
+  final ref = _db.collection('events').doc(eventId);
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    if (!snap.exists) return;
 
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (!snap.exists) return;
+    final data = snap.data()!;
+    final List comments = List.from(data['comments'] ?? []);
 
-      final data = snap.data()!;
-      final List comments = List.from(data['comments'] ?? []);
+    for (final c in comments) {
+      if (c['id'] == commentId) {
+        final likes = List<String>.from(c['likes'] ?? []);
+        final dislikes = List<String>.from(c['dislikes'] ?? []);
 
-      for (final c in comments) {
-        if (c['id'] == commentId) {
-          final likes = List<String>.from(c['likes'] ?? []);
-          final dislikes = List<String>.from(c['dislikes'] ?? []);
-
-          if (dislikes.contains(userId)) {
-            dislikes.remove(userId);
-          } else {
-            dislikes.add(userId);
-            likes.remove(userId);
-          }
-
-          c['likes'] = likes;
-          c['dislikes'] = dislikes;
-          break;
+        if (dislikes.contains(userId)) {
+          dislikes.remove(userId);
+        } else {
+          dislikes.add(userId);
+          likes.remove(userId);
         }
-      }
 
-      tx.update(ref, {'comments': comments});
-    });
-  }
+        c['likes'] = likes;
+        c['dislikes'] = dislikes;
+        break;
+      }
+    }
+
+    tx.update(ref, {'comments': comments});
+  });
+}
 
 
   /// ================================
