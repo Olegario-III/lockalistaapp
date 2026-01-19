@@ -1,8 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// =======================
+/// Comment Model
+/// =======================
 class CommentModel {
   final String id;
-  final String userId; // ✅ renamed from uid
+  final String userId;
   final String content;
   final DateTime timestamp;
   final List<String> likes;
@@ -23,7 +26,9 @@ class CommentModel {
       id: map['id'] ?? '',
       userId: map['userId'] ?? '',
       content: map['content'] ?? '',
-      timestamp: (map['timestamp'] as Timestamp).toDate(),
+      timestamp: map['timestamp'] != null
+          ? (map['timestamp'] as Timestamp).toDate()
+          : DateTime.now(),
       likes: List<String>.from(map['likes'] ?? []),
       dislikes: List<String>.from(map['dislikes'] ?? []),
     );
@@ -41,19 +46,33 @@ class CommentModel {
   }
 }
 
+/// =======================
+/// Event Model
+/// =======================
 class EventModel {
   final String id;
   final String title;
   final String description;
-  final String ownerId; // Poster UID
+
+  /// 🔑 Original owner field
+  final String ownerId;
+
+  /// ✅ Alias for admin pages & consistency
+  String get userId => ownerId;
+
   final String? ownerAvatarUrl;
   final String? imageUrl;
   final DateTime? timestamp;
   final DateTime startDate;
   final DateTime endDate;
+
+  /// pending | approved | rejected
   final String status;
-  final String? approvedBy; // Admin UID
+
+  /// Admin approval info
+  final String? approvedBy;
   final String? approvedByName;
+
   final List<String> likesList;
   final int likesCount;
   final List<CommentModel> comments;
@@ -71,17 +90,19 @@ class EventModel {
     required this.status,
     this.approvedBy,
     this.approvedByName,
-    required this.likesList,
-    required this.likesCount,
-    required this.comments,
-  });
+    List<String>? likesList,
+    int? likesCount,
+    List<CommentModel>? comments,
+  })  : likesList = likesList ?? [],
+        likesCount = likesCount ?? 0,
+        comments = comments ?? [];
 
   factory EventModel.fromMap(Map<String, dynamic> map, String id) {
     return EventModel(
       id: id,
       title: map['title'] ?? '',
       description: map['description'] ?? '',
-      ownerId: map['ownerId'] ?? '',
+      ownerId: map['ownerId'] ?? map['userId'] ?? '',
       ownerAvatarUrl: map['ownerAvatarUrl'],
       imageUrl: map['imageUrl'],
       timestamp: map['createdAt'] != null

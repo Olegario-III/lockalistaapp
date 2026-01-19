@@ -99,24 +99,26 @@ class _AddEventPageState extends State<AddEventPage> {
         );
       }
 
-      final eventId = FirestoreService.instance.generateId('events');
+      final firestore = FirestoreService.instance;
+      final eventId = firestore.generateId('events');
 
       final event = EventModel(
         id: eventId,
         title: titleCtrl.text.trim(),
         description: descCtrl.text.trim(),
-        userId: currentUser.uid,
+        ownerId: currentUser.uid, // ✅ FIXED
         imageUrl: imageUrl,
-        createdAt: DateTime.now(),
+        timestamp: DateTime.now(), // ✅ FIXED
+        startDate: _startDate!,
+        endDate: _endDate!,
         status: 'pending', // 🔒 admin approval required
         likesList: [],
         likesCount: 0,
         comments: [],
-        startDate: _startDate!,
-        endDate: _endDate!,
       );
 
-      await FirestoreService.instance.addEvent(event);
+      // ✅ FIXED: pass ID + model
+      await firestore.addEvent(event, eventId);
 
       if (!mounted) return;
 
@@ -173,18 +175,22 @@ class _AddEventPageState extends State<AddEventPage> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: pickStartDate,
-                      child: Text(_startDate == null
-                          ? 'Pick Start Date'
-                          : 'Start: ${_startDate!.toLocal().toString().split(' ')[0]}'),
+                      child: Text(
+                        _startDate == null
+                            ? 'Pick Start Date'
+                            : 'Start: ${_startDate!.toLocal().toString().split(' ')[0]}',
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton(
                       onPressed: pickEndDate,
-                      child: Text(_endDate == null
-                          ? 'Pick End Date'
-                          : 'End: ${_endDate!.toLocal().toString().split(' ')[0]}'),
+                      child: Text(
+                        _endDate == null
+                            ? 'Pick End Date'
+                            : 'End: ${_endDate!.toLocal().toString().split(' ')[0]}',
+                      ),
                     ),
                   ),
                 ],

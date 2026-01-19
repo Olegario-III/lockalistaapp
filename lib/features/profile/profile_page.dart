@@ -7,14 +7,16 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '/core/services/cloudinary_service.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+  final String userId; // ✅ required for navigation from events
+
+  const ProfilePage({super.key, required this.userId});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final User? user = FirebaseAuth.instance.currentUser;
+  final User? currentUser = FirebaseAuth.instance.currentUser;
 
   bool isDarkMode = true;
   bool isUploading = false;
@@ -30,9 +32,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> loadProfile() async {
-    if (user == null) return;
+    final uid = widget.userId;
+    if (uid.isEmpty) return;
 
-    final doc = await FirebaseFirestore.instance.collection("users").doc(user!.uid).get();
+    final doc = await FirebaseFirestore.instance.collection("users").doc(uid).get();
 
     if (!mounted) return;
 
@@ -40,24 +43,27 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() {
         displayName = doc.data()?["name"] ?? "";
         imageUrl = doc.data()?["image"] ?? "";
-        email = doc.data()?["email"] ?? user!.email ?? "";
+        email = doc.data()?["email"] ?? (currentUser?.email ?? "");
       });
     } else {
-      await FirebaseFirestore.instance.collection("users").doc(user!.uid).set({
-        "name": user!.displayName ?? "",
-        "email": user!.email ?? "",
-        "image": "",
-      });
-      setState(() {
-        displayName = user!.displayName ?? "";
-        email = user!.email ?? "";
-        imageUrl = "";
-      });
+      // If no doc, create it (only if it's the current user)
+      if (uid == currentUser?.uid) {
+        await FirebaseFirestore.instance.collection("users").doc(uid).set({
+          "name": currentUser!.displayName ?? "",
+          "email": currentUser!.email ?? "",
+          "image": "",
+        });
+        setState(() {
+          displayName = currentUser!.displayName ?? "";
+          email = currentUser!.email ?? "";
+          imageUrl = "";
+        });
+      }
     }
   }
 
   Future<void> pickImage() async {
-    if (isUploading || user == null) return;
+    if (isUploading || widget.userId != currentUser?.uid) return;
 
     final picker = ImagePicker();
     final XFile? picked =
@@ -82,7 +88,7 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
-    await FirebaseFirestore.instance.collection("users").doc(user!.uid).set({
+    await FirebaseFirestore.instance.collection("users").doc(widget.userId).set({
       "name": displayName,
       "email": email,
       "image": url,
@@ -104,6 +110,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> editName() async {
+    if (widget.userId != currentUser?.uid) return; // Only editable for current user
+
     final controller = TextEditingController(text: displayName);
     final result = await showDialog<String>(
       context: context,
@@ -126,13 +134,15 @@ class _ProfilePageState extends State<ProfilePage> {
     if (result != null && result.trim().isNotEmpty) {
       await FirebaseFirestore.instance
           .collection("users")
-          .doc(user!.uid)
+          .doc(widget.userId)
           .update({"name": result.trim()});
       setState(() => displayName = result.trim());
     }
   }
 
   Future<void> changePassword() async {
+    if (widget.userId != currentUser?.uid) return; // Only editable for current user
+
     final oldCtrl = TextEditingController();
     final newCtrl = TextEditingController();
 
@@ -169,9 +179,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
     try {
       final cred = EmailAuthProvider.credential(
-          email: user!.email!, password: oldCtrl.text);
-      await user!.reauthenticateWithCredential(cred);
-      await user!.updatePassword(newCtrl.text);
+          email: currentUser!.email!, password: oldCtrl.text);
+      await currentUser!.reauthenticateWithCredential(cred);
+      await currentUser!.updatePassword(newCtrl.text);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text("Password updated")));
     } catch (e) {
@@ -192,15 +202,16 @@ class _ProfilePageState extends State<ProfilePage> {
           IconButton(
               icon: Icon(isDarkMode ? Icons.wb_sunny : Icons.nightlight_round),
               onPressed: toggleDarkMode),
-          TextButton(
-            onPressed: logout,
-            child: Text(
-              "LOGOUT",
-              style: TextStyle(
-                  color: isDarkMode ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.bold),
+          if (widget.userId == currentUser?.uid)
+            TextButton(
+              onPressed: logout,
+              child: Text(
+                "LOGOUT",
+                style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold),
+              ),
             ),
-          ),
         ],
       ),
       body: SafeArea(
@@ -252,19 +263,22 @@ class _ProfilePageState extends State<ProfilePage> {
                           color: isDarkMode ? Colors.white70 : Colors.black54),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                        onPressed: editName,
-                        icon: const Icon(Icons.edit),
-                        label: const Text("Edit Name"),
-                        style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 48))),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                        onPressed: changePassword,
-                        icon: const Icon(Icons.lock),
-                        label: const Text("Change Password"),
-                        style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 48))),
+                    if (widget.userId == currentUser?.uid)
+                      ElevatedButton.icon(
+                          onPressed: editName,
+                          icon: const Icon(Icons.edit),
+                          label: const Text("Edit Name"),
+                          style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 48))),
+                    if (widget.userId == currentUser?.uid)
+                      const SizedBox(height: 12),
+                    if (widget.userId == currentUser?.uid)
+                      ElevatedButton.icon(
+                          onPressed: changePassword,
+                          icon: const Icon(Icons.lock),
+                          label: const Text("Change Password"),
+                          style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 48))),
                   ],
                 ),
               ),

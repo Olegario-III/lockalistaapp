@@ -34,7 +34,7 @@ class _EditEventPageState extends State<EditEventPage> {
     super.initState();
     _titleCtrl.text = widget.event.title;
     _descCtrl.text = widget.event.description;
-    _selectedDate = widget.event.createdAt;
+    _selectedDate = widget.event.timestamp;
   }
 
   // ────────────────────────────────

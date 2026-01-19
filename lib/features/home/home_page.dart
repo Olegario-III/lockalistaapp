@@ -33,7 +33,8 @@ class _HomePageState extends State<HomePage> {
       EventListPage(),
       StoreListPage(),
       SearchPage(),
-      ProfilePage(),
+      if (_auth.currentUser != null)
+    ProfilePage(userId: _auth.currentUser!.uid),
     ];
     _checkAdmin();
   }

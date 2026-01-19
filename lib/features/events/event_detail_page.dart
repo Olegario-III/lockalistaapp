@@ -1,3 +1,4 @@
+// lib/features/events/event_detail_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/firestore_service.dart';
@@ -28,7 +29,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ─── Top Info: Poster + Approved by ───
+            // ─── Poster info ───
             ListTile(
               leading: GestureDetector(
                 onTap: () {
@@ -65,7 +66,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
             // ─── Event Image ───
             if (e.imageUrl != null && e.imageUrl!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Image.network(
                   e.imageUrl!,
                   width: screenWidth * 0.9,
@@ -75,11 +76,11 @@ class _EventDetailPageState extends State<EventDetailPage> {
 
             // ─── Description ───
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: Text(e.description),
             ),
 
-            // ─── Likes & Comments ───
+            // ─── Likes ───
             StreamBuilder<em.EventModel>(
               stream: _service.getEventStream(e.id),
               builder: (context, snap) {
@@ -125,13 +126,15 @@ class _EventDetailPageState extends State<EventDetailPage> {
                       future: _service.getUserName(c.userId),
                       builder: (context, userSnap) {
                         final commenterName = userSnap.data ?? 'Loading...';
+
                         return ListTile(
                           leading: GestureDetector(
                             onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ProfilePage(userId: c.userId),
+                                  builder: (_) =>
+                                      ProfilePage(userId: c.userId),
                                 ),
                               );
                             },
@@ -146,7 +149,8 @@ class _EventDetailPageState extends State<EventDetailPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ProfilePage(uid: c.userId),
+                                  builder: (_) =>
+                                      ProfilePage(userId: c.userId),
                                 ),
                               );
                             },
@@ -158,7 +162,8 @@ class _EventDetailPageState extends State<EventDetailPage> {
                             children: [
                               Text('${c.likes.length}'),
                               IconButton(
-                                icon: const Icon(Icons.thumb_up_alt_outlined),
+                                icon:
+                                    const Icon(Icons.thumb_up_alt_outlined),
                                 onPressed: () async {
                                   if (user == null) return;
                                   await _service.toggleCommentLike(
@@ -170,7 +175,8 @@ class _EventDetailPageState extends State<EventDetailPage> {
                               ),
                               Text('${c.dislikes.length}'),
                               IconButton(
-                                icon: const Icon(Icons.thumb_down_alt_outlined),
+                                icon:
+                                    const Icon(Icons.thumb_down_alt_outlined),
                                 onPressed: () async {
                                   if (user == null) return;
                                   await _service.toggleCommentDislike(
@@ -198,8 +204,9 @@ class _EventDetailPageState extends State<EventDetailPage> {
                   Expanded(
                     child: TextField(
                       controller: _commentCtrl,
-                      decoration:
-                          const InputDecoration(hintText: 'Write a comment'),
+                      decoration: const InputDecoration(
+                        hintText: 'Write a comment',
+                      ),
                     ),
                   ),
                   IconButton(
@@ -213,9 +220,11 @@ class _EventDetailPageState extends State<EventDetailPage> {
                       }
 
                       final comment = em.CommentModel(
-                        id: DateTime.now().millisecondsSinceEpoch.toString(),
+                        id: DateTime.now()
+                            .millisecondsSinceEpoch
+                            .toString(),
                         userId: user.uid,
-                        content: _commentCtrl.text,
+                        content: _commentCtrl.text.trim(),
                         timestamp: DateTime.now(),
                       );
 
