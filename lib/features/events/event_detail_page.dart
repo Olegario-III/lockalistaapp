@@ -19,6 +19,27 @@ class _EventDetailPageState extends State<EventDetailPage> {
   final TextEditingController _commentCtrl = TextEditingController();
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
+  bool isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdmin();
+  }
+
+  Future<void> _checkAdmin() async {
+    if (currentUser == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser!.uid)
+        .get();
+
+    if (doc.exists && doc.data()?['role'] == 'admin') {
+      setState(() => isAdmin = true);
+    }
+  }
+
   /// Load event owner profile
   Future<Map<String, String?>> _loadOwnerProfile() async {
     if (widget.event.ownerName.isNotEmpty) {
@@ -82,12 +103,96 @@ class _EventDetailPageState extends State<EventDetailPage> {
     });
   }
 
-  /// Report comment (placeholder)
+  /// Report comment
   void _reportComment(CommentModel comment) {
-    // You can implement report logic here (e.g., add to Firestore 'reports' collection)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Reported comment: ${comment.content}')),
     );
+  }
+
+  /// Like/dislike comment
+  Future<void> _toggleLike(CommentModel comment) async {
+    if (currentUser == null) return;
+
+    await FirestoreService.instance.toggleCommentLike(
+      eventId: widget.event.id,
+      commentId: comment.id,
+      userId: currentUser!.uid,
+    );
+
+    setState(() {
+      final idx =
+          widget.event.comments.indexWhere((element) => element.id == comment.id);
+      if (idx != -1) {
+        final likes = widget.event.comments[idx].likes;
+        final dislikes = widget.event.comments[idx].dislikes;
+
+        if (likes.contains(currentUser!.uid)) {
+          likes.remove(currentUser!.uid);
+        } else {
+          likes.add(currentUser!.uid);
+          dislikes.remove(currentUser!.uid);
+        }
+      }
+    });
+  }
+
+  Future<void> _toggleDislike(CommentModel comment) async {
+    if (currentUser == null) return;
+
+    await FirestoreService.instance.toggleCommentDislike(
+      eventId: widget.event.id,
+      commentId: comment.id,
+      userId: currentUser!.uid,
+    );
+
+    setState(() {
+      final idx =
+          widget.event.comments.indexWhere((element) => element.id == comment.id);
+      if (idx != -1) {
+        final likes = widget.event.comments[idx].likes;
+        final dislikes = widget.event.comments[idx].dislikes;
+
+        if (dislikes.contains(currentUser!.uid)) {
+          dislikes.remove(currentUser!.uid);
+        } else {
+          dislikes.add(currentUser!.uid);
+          likes.remove(currentUser!.uid);
+        }
+      }
+    });
+  }
+
+  /// Delete comment
+  Future<void> _deleteComment(CommentModel comment) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Comment'),
+        content: const Text('Are you sure you want to delete this comment?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirestoreService.instance.deleteComment(
+        eventId: widget.event.id,
+        commentId: comment.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        widget.event.comments.removeWhere((e) => e.id == comment.id);
+      });
+    }
   }
 
   @override
@@ -186,6 +291,11 @@ class _EventDetailPageState extends State<EventDetailPage> {
                             final name = snapshot.data?['name'] ?? 'Unknown';
                             final avatar = snapshot.data?['avatar'];
 
+                            final canDelete = currentUser != null &&
+                                (currentUser!.uid == c.userId ||
+                                    currentUser!.uid == event.ownerId ||
+                                    isAdmin);
+
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: CircleAvatar(
@@ -197,18 +307,57 @@ class _EventDetailPageState extends State<EventDetailPage> {
                                     ? const Icon(Icons.person, size: 16)
                                     : null,
                               ),
-                              title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              title: Text(name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14)),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(c.content, style: const TextStyle(fontSize: 14)),
-                                  Text(c.timestamp.toLocal().toString().split('.')[0],
+                                  Text(
+                                      c.timestamp.toLocal().toString().split('.')[0],
                                       style: const TextStyle(fontSize: 11)),
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.thumb_up,
+                                          size: 18,
+                                          color: c.likes.contains(currentUser?.uid)
+                                              ? Colors.blue
+                                              : Colors.grey,
+                                        ),
+                                        onPressed: () => _toggleLike(c),
+                                      ),
+                                      Text('${c.likes.length}'),
+                                      const SizedBox(width: 12),
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.thumb_down,
+                                          size: 18,
+                                          color: c.dislikes.contains(currentUser?.uid)
+                                              ? Colors.red
+                                              : Colors.grey,
+                                        ),
+                                        onPressed: () => _toggleDislike(c),
+                                      ),
+                                      Text('${c.dislikes.length}'),
+                                      const SizedBox(width: 12),
+                                      IconButton(
+                                        icon: const Icon(Icons.report,
+                                            size: 18, color: Colors.redAccent),
+                                        onPressed: () => _reportComment(c),
+                                      ),
+                                      if (canDelete)
+                                        IconButton(
+                                          icon: const Icon(Icons.delete,
+                                              size: 18, color: Colors.red),
+                                          onPressed: () => _deleteComment(c),
+                                        ),
+                                    ],
+                                  )
                                 ],
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.report, size: 18, color: Colors.redAccent),
-                                onPressed: () => _reportComment(c),
                               ),
                             );
                           },

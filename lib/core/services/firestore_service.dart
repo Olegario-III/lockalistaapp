@@ -375,6 +375,25 @@ Future<void> toggleCommentDislike({
   });
 }
 
+/// 💬 Delete comment
+Future<void> deleteComment({
+  required String eventId,
+  required String commentId,
+}) async {
+  final ref = _db.collection('events').doc(eventId);
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    if (!snap.exists) return;
+
+    final data = snap.data()!;
+    final List comments = List.from(data['comments'] ?? []);
+
+    comments.removeWhere((c) => c['id'] == commentId);
+
+    tx.update(ref, {'comments': comments});
+  });
+}
+
 
   /// ================================
   /// 👤 USERS
