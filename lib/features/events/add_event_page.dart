@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/services/firestore_service.dart';
 import '../../core/services/cloudinary_service.dart';
@@ -16,7 +17,7 @@ class AddEventPage extends StatefulWidget {
 }
 
 class _AddEventPageState extends State<AddEventPage> {
-  final _authService = AuthService();
+  final AuthService _authService = AuthService();
 
   final TextEditingController titleCtrl = TextEditingController();
   final TextEditingController descCtrl = TextEditingController();
@@ -24,17 +25,19 @@ class _AddEventPageState extends State<AddEventPage> {
   DateTime? _startDate;
   DateTime? _endDate;
 
-  File? imageFile;
-  final picker = ImagePicker();
+  File? _imageFile;
+  final ImagePicker _picker = ImagePicker();
   bool _isSubmitting = false;
 
   // ────────────────────────────────
   // 🖼 Pick image
   // ────────────────────────────────
   Future<void> pickImage() async {
-    final XFile? file = await picker.pickImage(source: ImageSource.gallery);
+    final XFile? file =
+        await _picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
-    setState(() => imageFile = File(file.path));
+
+    setState(() => _imageFile = File(file.path));
   }
 
   // ────────────────────────────────
@@ -47,7 +50,10 @@ class _AddEventPageState extends State<AddEventPage> {
       firstDate: DateTime.now(),
       lastDate: DateTime(2100),
     );
-    if (date != null) setState(() => _startDate = date);
+
+    if (date != null) {
+      setState(() => _startDate = date);
+    }
   }
 
   // ────────────────────────────────
@@ -60,13 +66,17 @@ class _AddEventPageState extends State<AddEventPage> {
       );
       return;
     }
+
     final date = await showDatePicker(
       context: context,
       initialDate: _startDate!,
       firstDate: _startDate!,
       lastDate: DateTime(2100),
     );
-    if (date != null) setState(() => _endDate = date);
+
+    if (date != null) {
+      setState(() => _endDate = date);
+    }
   }
 
   // ────────────────────────────────
@@ -80,7 +90,9 @@ class _AddEventPageState extends State<AddEventPage> {
         _startDate == null ||
         _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All fields including dates are required')),
+        const SnackBar(
+          content: Text('All fields including dates are required'),
+        ),
       );
       return;
     }
@@ -91,10 +103,26 @@ class _AddEventPageState extends State<AddEventPage> {
     setState(() => _isSubmitting = true);
 
     try {
+      // ────────────────────────────────
+      // 👤 LOAD USER PROFILE FROM FIRESTORE
+      // ────────────────────────────────
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      final userData = userDoc.data();
+
+      final ownerName = userData?['name'] ?? 'Unknown';
+      final ownerAvatar = userData?['image'];
+
+      // ────────────────────────────────
+      // 🖼 Upload event image
+      // ────────────────────────────────
       String? imageUrl;
-      if (imageFile != null) {
+      if (_imageFile != null) {
         imageUrl = await CloudinaryService().uploadFile(
-          imageFile!,
+          _imageFile!,
           folder: 'events',
         );
       }
@@ -106,18 +134,22 @@ class _AddEventPageState extends State<AddEventPage> {
         id: eventId,
         title: titleCtrl.text.trim(),
         description: descCtrl.text.trim(),
-        ownerId: currentUser.uid, // ✅ FIXED
+
+        // ✅ CORRECT USER DATA
+        ownerId: currentUser.uid,
+        ownerName: ownerName,
+        ownerAvatar: ownerAvatar,
+
         imageUrl: imageUrl,
-        timestamp: DateTime.now(), // ✅ FIXED
+        timestamp: DateTime.now(),
         startDate: _startDate!,
         endDate: _endDate!,
-        status: 'pending', // 🔒 admin approval required
-        likesList: [],
+        status: 'pending',
+        likesList: const [],
         likesCount: 0,
-        comments: [],
+        comments: const [],
       );
 
-      // ✅ FIXED: pass ID + model
       await firestore.addEvent(event, eventId);
 
       if (!mounted) return;
@@ -202,15 +234,17 @@ class _AddEventPageState extends State<AddEventPage> {
                   height: 150,
                   width: double.infinity,
                   color: Colors.grey[300],
-                  child: imageFile != null
-                      ? Image.file(imageFile!, fit: BoxFit.cover)
+                  child: _imageFile != null
+                      ? Image.file(_imageFile!, fit: BoxFit.cover)
                       : const Center(child: Text('Tap to pick an image')),
                 ),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isSubmitting ? null : submitEvent,
-                child: Text(_isSubmitting ? 'Submitting...' : 'Submit Event'),
+                child: Text(
+                  _isSubmitting ? 'Submitting...' : 'Submit Event',
+                ),
               ),
             ],
           ),

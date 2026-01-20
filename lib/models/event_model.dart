@@ -24,7 +24,8 @@ class CommentModel {
   factory CommentModel.fromMap(Map<String, dynamic> map) {
     return CommentModel(
       id: map['id'] ?? '',
-      userId: map['userId'] ?? '',
+      // 🔁 supports both `uid` and `userId`
+      userId: map['userId'] ?? map['uid'] ?? '',
       content: map['content'] ?? '',
       timestamp: map['timestamp'] != null
           ? (map['timestamp'] as Timestamp).toDate()
@@ -54,15 +55,18 @@ class EventModel {
   final String title;
   final String description;
 
-  /// 🔑 Original owner field
+  /// 🔑 Event owner
   final String ownerId;
 
-  /// ✅ Alias for admin pages & consistency
+  /// ✅ Alias (prevents undefined getter errors)
   String get userId => ownerId;
 
-  final String? ownerAvatarUrl;
+  /// 👤 Snapshot user info (FIXES avatar & name)
+  final String ownerName;
+  final String? ownerAvatar;
+
   final String? imageUrl;
-  final DateTime? timestamp;
+  final DateTime timestamp;
   final DateTime startDate;
   final DateTime endDate;
 
@@ -82,9 +86,10 @@ class EventModel {
     required this.title,
     required this.description,
     required this.ownerId,
-    this.ownerAvatarUrl,
+    required this.ownerName,
+    this.ownerAvatar,
     this.imageUrl,
-    this.timestamp,
+    required this.timestamp,
     required this.startDate,
     required this.endDate,
     required this.status,
@@ -97,17 +102,22 @@ class EventModel {
         likesCount = likesCount ?? 0,
         comments = comments ?? [];
 
+  /// 🔄 Firestore → Model
   factory EventModel.fromMap(Map<String, dynamic> map, String id) {
     return EventModel(
       id: id,
       title: map['title'] ?? '',
       description: map['description'] ?? '',
+
+      // 🔁 supports old + new field names
       ownerId: map['ownerId'] ?? map['userId'] ?? '',
-      ownerAvatarUrl: map['ownerAvatarUrl'],
+      ownerName: map['ownerName'] ?? 'Unknown',
+      ownerAvatar: map['ownerAvatar'] ?? map['ownerAvatarUrl'],
+
       imageUrl: map['imageUrl'],
       timestamp: map['createdAt'] != null
           ? (map['createdAt'] as Timestamp).toDate()
-          : null,
+          : DateTime.now(),
       startDate: (map['startDate'] as Timestamp).toDate(),
       endDate: (map['endDate'] as Timestamp).toDate(),
       status: map['status'] ?? 'pending',
@@ -116,19 +126,25 @@ class EventModel {
       likesList: List<String>.from(map['likesList'] ?? []),
       likesCount: map['likesCount'] ?? 0,
       comments: (map['comments'] as List<dynamic>? ?? [])
-          .map((c) => CommentModel.fromMap(Map<String, dynamic>.from(c)))
+          .map(
+            (c) => CommentModel.fromMap(
+              Map<String, dynamic>.from(c),
+            ),
+          )
           .toList(),
     );
   }
 
+  /// 🔼 Model → Firestore
   Map<String, dynamic> toMap() {
     return {
       'title': title,
       'description': description,
       'ownerId': ownerId,
-      'ownerAvatarUrl': ownerAvatarUrl,
+      'ownerName': ownerName,
+      'ownerAvatar': ownerAvatar,
       'imageUrl': imageUrl,
-      'createdAt': timestamp != null ? Timestamp.fromDate(timestamp!) : null,
+      'createdAt': Timestamp.fromDate(timestamp),
       'startDate': Timestamp.fromDate(startDate),
       'endDate': Timestamp.fromDate(endDate),
       'status': status,

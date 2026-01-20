@@ -111,8 +111,8 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(builder: (_) => const AddEventPage()),
           );
         },
-        child: const Icon(Icons.add),
         tooltip: 'Add Event (Pending Approval)',
+        child: const Icon(Icons.add),
       );
     }
 
@@ -125,8 +125,8 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(builder: (_) => const AddStorePage()),
           );
         },
-        child: const Icon(Icons.add_business),
         tooltip: 'Add Store (Pending Approval)',
+        child: const Icon(Icons.add_business),
       );
     }
 

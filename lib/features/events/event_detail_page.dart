@@ -1,12 +1,13 @@
 // lib/features/events/event_detail_page.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../models/event_model.dart';
 import '../../core/services/firestore_service.dart';
-import '../../models/event_model.dart' as em;
-import '../profile/profile_page.dart';
 
 class EventDetailPage extends StatefulWidget {
-  final em.EventModel event;
+  final EventModel event;
 
   const EventDetailPage({super.key, required this.event});
 
@@ -15,228 +16,232 @@ class EventDetailPage extends StatefulWidget {
 }
 
 class _EventDetailPageState extends State<EventDetailPage> {
-  final _service = FirestoreService.instance;
   final TextEditingController _commentCtrl = TextEditingController();
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+
+  /// Load event owner profile
+  Future<Map<String, String?>> _loadOwnerProfile() async {
+    if (widget.event.ownerName.isNotEmpty) {
+      return {
+        'name': widget.event.ownerName,
+        'avatar': widget.event.ownerAvatar,
+      };
+    }
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.event.ownerId)
+        .get();
+
+    final data = doc.data();
+
+    return {
+      'name': data?['name'] ?? 'Unknown',
+      'avatar': data?['image'],
+    };
+  }
+
+  /// Load comment user's name & avatar
+  Future<Map<String, String?>> _loadCommentUser(String userId) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+
+    final data = doc.data();
+    return {
+      'name': data?['name'] ?? 'Unknown',
+      'avatar': data?['image'],
+    };
+  }
+
+  /// Add comment
+  Future<void> _addComment() async {
+    if (_commentCtrl.text.trim().isEmpty || currentUser == null) return;
+
+    final commentId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    final comment = CommentModel(
+      id: commentId,
+      userId: currentUser!.uid,
+      content: _commentCtrl.text.trim(),
+      timestamp: DateTime.now(),
+    );
+
+    await FirestoreService.instance.addCommentToEvent(
+      widget.event.id,
+      comment,
+    );
+
+    if (!mounted) return;
+    _commentCtrl.clear();
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      widget.event.comments.add(comment);
+    });
+  }
+
+  /// Report comment (placeholder)
+  void _reportComment(CommentModel comment) {
+    // You can implement report logic here (e.g., add to Firestore 'reports' collection)
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Reported comment: ${comment.content}')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final e = widget.event;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final event = widget.event;
 
     return Scaffold(
-      appBar: AppBar(title: Text(e.title)),
+      appBar: AppBar(title: Text(event.title)),
       body: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── Poster info ───
-            ListTile(
-              leading: GestureDetector(
-                onTap: () {
-                  if (e.ownerId.isNotEmpty) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProfilePage(userId: e.ownerId),
-                      ),
-                    );
-                  }
-                },
-                child: CircleAvatar(
-                  backgroundImage: NetworkImage(
-                    e.ownerAvatarUrl ??
-                        'https://i.pravatar.cc/150?u=${e.ownerId}',
-                  ),
-                ),
+            if (event.imageUrl != null)
+              Image.network(
+                event.imageUrl!,
+                width: double.infinity,
+                height: 220,
+                fit: BoxFit.cover,
               ),
-              title: Text(e.ownerId),
-              subtitle: Text(
-                e.approvedByName != null && e.approvedByName!.isNotEmpty
-                    ? 'Approved by: ${e.approvedByName}'
-                    : 'Pending approval',
-              ),
-              trailing: Text(
-                e.timestamp != null
-                    ? '${e.timestamp!.toLocal()}'.split(' ')[0]
-                    : '',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ),
-
-            // ─── Event Image ───
-            if (e.imageUrl != null && e.imageUrl!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Image.network(
-                  e.imageUrl!,
-                  width: screenWidth * 0.9,
-                  fit: BoxFit.cover,
-                ),
-              ),
-
-            // ─── Description ───
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(e.description),
-            ),
-
-            // ─── Likes ───
-            StreamBuilder<em.EventModel>(
-              stream: _service.getEventStream(e.id),
-              builder: (context, snap) {
-                if (!snap.hasData) return const SizedBox();
-                final liveEvent = snap.data!;
-                final liked = liveEvent.likesList.contains(user?.uid);
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          liked ? Icons.favorite : Icons.favorite_border,
-                          color: Colors.red,
-                        ),
-                        onPressed: () async {
-                          if (user == null) return;
-                          await _service.likeEvent(e.id, user.uid);
-                        },
-                      ),
-                      Text('${liveEvent.likesCount}'),
-                      const SizedBox(width: 16),
-                      Text('${liveEvent.comments.length} comments'),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-            const Divider(),
-
-            // ─── Comments ───
-            StreamBuilder<em.EventModel>(
-              stream: _service.getEventStream(e.id),
-              builder: (context, snap) {
-                if (!snap.hasData) return const SizedBox();
-                final liveEvent = snap.data!;
-
-                return Column(
-                  children: liveEvent.comments.map((c) {
-                    return FutureBuilder<String>(
-                      future: _service.getUserName(c.userId),
-                      builder: (context, userSnap) {
-                        final commenterName = userSnap.data ?? 'Loading...';
-
-                        return ListTile(
-                          leading: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ProfilePage(userId: c.userId),
-                                ),
-                              );
-                            },
-                            child: CircleAvatar(
-                              backgroundImage: NetworkImage(
-                                'https://i.pravatar.cc/150?u=${c.userId}',
-                              ),
-                            ),
-                          ),
-                          title: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ProfilePage(userId: c.userId),
-                                ),
-                              );
-                            },
-                            child: Text(commenterName),
-                          ),
-                          subtitle: Text(c.content),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('${c.likes.length}'),
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.thumb_up_alt_outlined),
-                                onPressed: () async {
-                                  if (user == null) return;
-                                  await _service.toggleCommentLike(
-                                    eventId: e.id,
-                                    commentId: c.id,
-                                    userId: user.uid,
-                                  );
-                                },
-                              ),
-                              Text('${c.dislikes.length}'),
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.thumb_down_alt_outlined),
-                                onPressed: () async {
-                                  if (user == null) return;
-                                  await _service.toggleCommentDislike(
-                                    eventId: e.id,
-                                    commentId: c.id,
-                                    userId: user.uid,
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-
-            // ─── Add comment ───
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentCtrl,
-                      decoration: const InputDecoration(
-                        hintText: 'Write a comment',
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () async {
-                      if (user == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Login first')),
-                        );
-                        return;
-                      }
+                  // 👤 Owner info
+                  FutureBuilder<Map<String, String?>>(
+                    future: _loadOwnerProfile(),
+                    builder: (context, snapshot) {
+                      final name = snapshot.data?['name'] ?? 'Unknown';
+                      final avatar = snapshot.data?['avatar'];
 
-                      final comment = em.CommentModel(
-                        id: DateTime.now()
-                            .millisecondsSinceEpoch
-                            .toString(),
-                        userId: user.uid,
-                        content: _commentCtrl.text.trim(),
-                        timestamp: DateTime.now(),
+                      return Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundImage:
+                                avatar != null && avatar.isNotEmpty
+                                    ? NetworkImage(avatar)
+                                    : null,
+                            child: avatar == null || avatar.isEmpty
+                                ? const Icon(Icons.person)
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ],
                       );
-
-                      await _service.addCommentToEvent(e.id, comment);
-                      _commentCtrl.clear();
                     },
                   ),
+                  const SizedBox(height: 16),
+
+                  // 📝 Description
+                  Text(event.description, style: const TextStyle(fontSize: 15)),
+                  const SizedBox(height: 16),
+
+                  // 📅 Dates
+                  Text(
+                      'Start: ${event.startDate.toLocal().toString().split(' ')[0]}'),
+                  Text(
+                      'End: ${event.endDate.toLocal().toString().split(' ')[0]}'),
+                  const SizedBox(height: 16),
+
+                  // ❤️ Likes
+                  Row(
+                    children: [
+                      const Icon(Icons.favorite, size: 18),
+                      const SizedBox(width: 6),
+                      Text('${event.likesCount} likes'),
+                    ],
+                  ),
+                  const Divider(height: 32),
+
+                  // 💬 Comments header
+                  Text(
+                    'Comments',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+
+                  // 💬 Comment list
+                  if (event.comments.isEmpty)
+                    const Text(
+                      'No comments yet.',
+                      style: TextStyle(color: Colors.grey),
+                    )
+                  else
+                    Column(
+                      children: event.comments.map((c) {
+                        return FutureBuilder<Map<String, String?>>(
+                          future: _loadCommentUser(c.userId),
+                          builder: (context, snapshot) {
+                            final name = snapshot.data?['name'] ?? 'Unknown';
+                            final avatar = snapshot.data?['avatar'];
+
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(
+                                radius: 16,
+                                backgroundImage: avatar != null && avatar.isNotEmpty
+                                    ? NetworkImage(avatar)
+                                    : null,
+                                child: avatar == null || avatar.isEmpty
+                                    ? const Icon(Icons.person, size: 16)
+                                    : null,
+                              ),
+                              title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(c.content, style: const TextStyle(fontSize: 14)),
+                                  Text(c.timestamp.toLocal().toString().split('.')[0],
+                                      style: const TextStyle(fontSize: 11)),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.report, size: 18, color: Colors.redAccent),
+                                onPressed: () => _reportComment(c),
+                              ),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    ),
+
+                  const SizedBox(height: 16),
+
+                  // ✍️ Add comment
+                  if (currentUser != null)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _commentCtrl,
+                            decoration: const InputDecoration(
+                              hintText: 'Write a comment...',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: _addComment,
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 24),
           ],
         ),
       ),

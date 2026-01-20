@@ -228,7 +228,7 @@ Stream<List<event.EventModel>> getApprovedEventsStream() {
       .orderBy('startDate')
       .snapshots()
       .map((snapshot) => snapshot.docs
-          .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) => event.EventModel.fromMap(doc.data(), doc.id))
           .toList());
 }
 
@@ -240,7 +240,7 @@ Stream<List<event.EventModel>> getPendingEventsStream() {
       .orderBy('createdAt', descending: true)
       .snapshots()
       .map((snapshot) => snapshot.docs
-          .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) => event.EventModel.fromMap(doc.data(), doc.id))
           .toList());
 }
 
@@ -252,7 +252,7 @@ Stream<List<event.EventModel>> getEventsStream({required String status}) {
       .orderBy('startDate')
       .snapshots()
       .map((snapshot) => snapshot.docs
-          .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+          .map((doc) => event.EventModel.fromMap(doc.data(), doc.id))
           .toList());
 }
 

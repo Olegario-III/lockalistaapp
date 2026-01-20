@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../core/services/firestore_service.dart';
 import '../../models/event_model.dart' as em;
 import '../events/event_detail_page.dart';
@@ -17,6 +18,7 @@ class EventListPage extends StatefulWidget {
 class _EventListPageState extends State<EventListPage> {
   final FirestoreService _service = FirestoreService.instance;
   final User? currentUser = FirebaseAuth.instance.currentUser;
+
   bool isAdmin = false;
 
   @override
@@ -33,18 +35,30 @@ class _EventListPageState extends State<EventListPage> {
         .doc(currentUser!.uid)
         .get();
 
-    if (doc.exists && (doc.data()?['role'] ?? '') == 'admin') {
+    if (doc.exists && doc.data()?['role'] == 'admin') {
       setState(() => isAdmin = true);
     }
   }
 
-  Future<Map<String, dynamic>> _getUserInfo(String uid) async {
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    if (!doc.exists) return {'name': 'Unknown', 'image': ''};
-    final data = doc.data()!;
+  /// 🔁 Fallback ONLY for old events
+  Future<Map<String, String?>> _loadOwnerProfile(em.EventModel e) async {
+    if (e.ownerName.isNotEmpty) {
+      return {
+        'name': e.ownerName,
+        'avatar': e.ownerAvatar,
+      };
+    }
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(e.ownerId)
+        .get();
+
+    final data = doc.data();
+
     return {
-      'name': data['name'] ?? 'Unknown',
-      'image': data['image'] ?? '',
+      'name': data?['name'] ?? 'Unknown',
+      'avatar': data?['image'],
     };
   }
 
@@ -66,78 +80,84 @@ class _EventListPageState extends State<EventListPage> {
 
           return ListView.separated(
             itemCount: events.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
             padding: const EdgeInsets.all(8),
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final e = events[index];
-
-              // Show delete button if current user is admin or poster
               final canDelete = isAdmin || e.ownerId == currentUser?.uid;
+              final liked = e.likesList.contains(currentUser?.uid);
 
-              return FutureBuilder<Map<String, dynamic>>(
-                future: _getUserInfo(e.ownerId),
-                builder: (context, userSnapshot) {
-                  final posterName = userSnapshot.data?['name'] ?? 'Loading...';
-                  final posterImage = userSnapshot.data?['image'] ?? '';
-
-                  final liked = e.likesList.contains(currentUser?.uid);
+              return FutureBuilder<Map<String, String?>>(
+                future: _loadOwnerProfile(e),
+                builder: (context, userSnap) {
+                  final posterName = userSnap.data?['name'] ?? 'Unknown';
+                  final posterAvatar = userSnap.data?['avatar'];
 
                   return Card(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
                     elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Admin approval info
-                        if (e.approvedByName != null && e.approvedByName!.isNotEmpty)
+                        // ✅ Approval info
+                        if (e.approvedByName != null &&
+                            e.approvedByName!.isNotEmpty)
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: Colors.green.shade100,
                               borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(12)),
+                                top: Radius.circular(12),
+                              ),
                             ),
                             child: Text(
                               'Approved by: ${e.approvedByName}',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.bold, color: Colors.green),
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
                             ),
                           ),
 
-                        // Poster info
+                        // 👤 Poster info
                         ListTile(
                           leading: GestureDetector(
                             onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ProfilePage(userId: e.ownerId),
+                                  builder: (_) =>
+                                      ProfilePage(userId: e.ownerId),
                                 ),
                               );
                             },
                             child: CircleAvatar(
-                              backgroundImage: posterImage.isNotEmpty
-                                  ? NetworkImage(posterImage)
-                                  : NetworkImage(
-                                      'https://i.pravatar.cc/150?u=${e.ownerId}'),
+                              backgroundImage: posterAvatar != null
+                                  ? NetworkImage(posterAvatar)
+                                  : null,
+                              child: posterAvatar == null
+                                  ? const Icon(Icons.person)
+                                  : null,
                             ),
                           ),
                           title: Text(
                             posterName,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          subtitle: e.timestamp != null
-                              ? Text(
-                                  '${e.timestamp!.toLocal()}'.split(' ')[0],
-                                  style: const TextStyle(fontSize: 12),
-                                )
-                              : null,
+                          subtitle: Text(
+                            e.timestamp
+                                .toLocal()
+                                .toString()
+                                .split(' ')[0],
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           trailing: canDelete
                               ? IconButton(
-                                  icon:
-                                      const Icon(Icons.delete, color: Colors.red),
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red),
                                   onPressed: () async {
                                     final confirm = await showDialog<bool>(
                                       context: context,
@@ -168,19 +188,19 @@ class _EventListPageState extends State<EventListPage> {
                               : null,
                         ),
 
-                        // Event image
+                        // 🖼 Event image
                         if (e.imageUrl != null && e.imageUrl!.isNotEmpty)
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Image.network(
                               e.imageUrl!,
-                              width: double.infinity,
                               height: 200,
+                              width: double.infinity,
                               fit: BoxFit.cover,
                             ),
                           ),
 
-                        // Title & description
+                        // 📝 Title & description
                         Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
@@ -189,7 +209,9 @@ class _EventListPageState extends State<EventListPage> {
                               Text(
                                 e.title,
                                 style: const TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.bold),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -200,7 +222,7 @@ class _EventListPageState extends State<EventListPage> {
                           ),
                         ),
 
-                        // Likes & comments
+                        // ❤️ Likes & 💬 Comments
                         Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 4),
@@ -208,15 +230,18 @@ class _EventListPageState extends State<EventListPage> {
                             children: [
                               IconButton(
                                 icon: Icon(
-                                  liked ? Icons.favorite : Icons.favorite_border,
+                                  liked
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
                                   color: Colors.red,
                                 ),
                                 onPressed: () async {
                                   if (currentUser == null) return;
-                                  await _service.likeEvent(e.id, currentUser!.uid);
+                                  await _service.likeEvent(
+                                      e.id, currentUser!.uid);
                                 },
                               ),
-                              Text('${e.likesCount} ❤️'),
+                              Text('${e.likesCount}'),
                               const SizedBox(width: 16),
                               Text('${e.comments.length} 💬'),
                               const Spacer(),
@@ -225,12 +250,13 @@ class _EventListPageState extends State<EventListPage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => EventDetailPage(event: e),
+                                      builder: (_) =>
+                                          EventDetailPage(event: e),
                                     ),
                                   );
                                 },
                                 child: const Text('View'),
-                              )
+                              ),
                             ],
                           ),
                         ),
