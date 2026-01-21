@@ -151,76 +151,112 @@ Future<void> reportStore(String storeId, String userId) async {
 /// 📅 EVENTS
 /// ================================
 
-/// Stream of a single event (live updates)
+/// 🔴 Live stream of a single event
 Stream<event.EventModel> getEventStream(String eventId) {
-  return _db.collection('events').doc(eventId).snapshots().map(
-        (doc) => event.EventModel.fromMap(doc.data()!, doc.id),
+  return _db
+      .collection('events')
+      .doc(eventId)
+      .snapshots()
+      .where((doc) => doc.exists && doc.data() != null)
+      .map(
+        (doc) => event.EventModel.fromMap(
+          doc.data() as Map<String, dynamic>,
+          doc.id,
+        ),
       );
 }
 
-/// Get username by Firebase UID
+/// 👤 Get username by UID
 Future<String> getUserName(String userId) async {
-  final doc = await _db.collection('users').doc(userId).get();
-  if (!doc.exists) return 'Unknown';
-  return (doc.data()?['name'] ?? 'No Name') as String;
+  try {
+    final doc = await _db.collection('users').doc(userId).get();
+    if (!doc.exists) return 'Unknown';
+    return doc.data()?['name'] ?? 'No Name';
+  } catch (_) {
+    return 'Unknown';
+  }
 }
 
-/// Get all events (optional filter by status)
+/// 📄 Get all events (optional status filter)
 Future<List<event.EventModel>> getEvents({String? status}) async {
-  Query query = _db.collection('events');
-  if (status != null) query = query.where('status', isEqualTo: status);
+  Query<Map<String, dynamic>> query = _db.collection('events');
+
+  if (status != null) {
+    query = query.where('status', isEqualTo: status);
+  }
 
   final snapshot = await query.orderBy('startDate').get();
+
   return snapshot.docs
-      .map((doc) => event.EventModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+      .where((doc) => doc.data().isNotEmpty)
+      .map((doc) => event.EventModel.fromMap(doc.data(), doc.id))
       .toList();
 }
 
-/// Get single event
+/// 📌 Get single event
 Future<event.EventModel?> getEventById(String id) async {
   final doc = await _db.collection('events').doc(id).get();
-  if (!doc.exists) return null;
-  return event.EventModel.fromMap(doc.data()!, doc.id);
+  if (!doc.exists || doc.data() == null) return null;
+
+  return event.EventModel.fromMap(
+    doc.data() as Map<String, dynamic>,
+    doc.id,
+  );
 }
 
-/// Add event → always pending
-Future<DocumentReference> addEvent(event.EventModel eventModel, String ownerId, {String? ownerAvatarUrl}) async {
-  return await _db.collection('events').add({
+/// ➕ Add event (always pending)
+Future<DocumentReference> addEvent(
+  event.EventModel eventModel,
+  String ownerId, {
+  String? ownerAvatarUrl,
+}) async {
+  return _db.collection('events').add({
     ...eventModel.toMap(),
     'ownerId': ownerId,
-    'ownerAvatarUrl': ownerAvatarUrl ?? '',
+    'ownerAvatar': ownerAvatarUrl ?? '',
     'status': 'pending',
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
 
-/// Add event with pre-generated ID
-Future<void> addEventWithId(event.EventModel eventModel, String ownerId, {String? ownerAvatarUrl}) async {
+/// ➕ Add event with predefined ID
+Future<void> addEventWithId(
+  event.EventModel eventModel,
+  String ownerId, {
+  String? ownerAvatarUrl,
+}) async {
   await _db.collection('events').doc(eventModel.id).set({
     ...eventModel.toMap(),
     'ownerId': ownerId,
-    'ownerAvatarUrl': ownerAvatarUrl ?? '',
+    'ownerAvatar': ownerAvatarUrl ?? '',
     'status': 'pending',
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
 
-/// Update full event
-Future<void> updateEvent(String id, event.EventModel eventModel) async {
-  await _db.collection('events').doc(id).update(eventModel.toMap());
+/// ✏️ Update full event
+Future<void> updateEvent(String id, event.EventModel model) async {
+  await _db.collection('events').doc(id).update(model.toMap());
 }
 
-/// Partial update
-Future<void> updateEventFields(String eventId, Map<String, dynamic> data) async {
+/// ✏️ Partial update
+Future<void> updateEventFields(
+  String eventId,
+  Map<String, dynamic> data,
+) async {
   await _db.collection('events').doc(eventId).update(data);
 }
 
-/// Delete event
+/// 🗑️ Delete event
 Future<void> deleteEvent(String id) async {
   await _db.collection('events').doc(id).delete();
 }
 
-/// Approved events (public)
+/// ================================
+/// 📢 EVENT STREAMS
+/// ================================
+
+/// ✅ Approved events (public)
 Stream<List<event.EventModel>> getApprovedEventsStream() {
   return _db
       .collection('events')
@@ -232,7 +268,7 @@ Stream<List<event.EventModel>> getApprovedEventsStream() {
           .toList());
 }
 
-/// Pending events (admin)
+/// ⏳ Pending events (admin)
 Stream<List<event.EventModel>> getPendingEventsStream() {
   return _db
       .collection('events')
@@ -244,8 +280,10 @@ Stream<List<event.EventModel>> getPendingEventsStream() {
           .toList());
 }
 
-/// Generic status stream
-Stream<List<event.EventModel>> getEventsStream({required String status}) {
+/// 🔁 Generic status stream
+Stream<List<event.EventModel>> getEventsStream({
+  required String status,
+}) {
   return _db
       .collection('events')
       .where('status', isEqualTo: status)
@@ -256,8 +294,15 @@ Stream<List<event.EventModel>> getEventsStream({required String status}) {
           .toList());
 }
 
-/// ✅ ADMIN ACTIONS
-Future<void> approveEvent(String id, {String? adminName, String? adminId}) async {
+/// ================================
+/// 🛂 ADMIN ACTIONS
+/// ================================
+
+Future<void> approveEvent(
+  String id, {
+  String? adminName,
+  String? adminId,
+}) async {
   await _db.collection('events').doc(id).update({
     'status': 'approved',
     'approvedAt': FieldValue.serverTimestamp(),
@@ -266,7 +311,11 @@ Future<void> approveEvent(String id, {String? adminName, String? adminId}) async
   });
 }
 
-Future<void> rejectEvent(String id, {String? adminName, String? adminId}) async {
+Future<void> rejectEvent(
+  String id, {
+  String? adminName,
+  String? adminId,
+}) async {
   await _db.collection('events').doc(id).update({
     'status': 'rejected',
     'rejectedAt': FieldValue.serverTimestamp(),
@@ -275,31 +324,45 @@ Future<void> rejectEvent(String id, {String? adminName, String? adminId}) async 
   });
 }
 
-/// ❤️ LIKES
+/// ================================
+/// ❤️ EVENT LIKES
+/// ================================
+
 Future<void> likeEvent(String eventId, String userId) async {
   final ref = _db.collection('events').doc(eventId);
+
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    if (!snap.exists) return;
+    if (!snap.exists || snap.data() == null) return;
 
     final data = snap.data()!;
-    final List likes = List.from(data['likesList'] ?? []);
-    int likesCount = data['likesCount'] ?? 0;
+    final List<String> likes =
+        List<String>.from(data['likesList'] ?? []);
+    int count = data['likesCount'] ?? 0;
 
     if (likes.contains(userId)) {
       likes.remove(userId);
-      likesCount--;
+      count--;
     } else {
       likes.add(userId);
-      likesCount++;
+      count++;
     }
 
-    tx.update(ref, {'likesList': likes, 'likesCount': likesCount});
+    tx.update(ref, {
+      'likesList': likes,
+      'likesCount': count < 0 ? 0 : count,
+    });
   });
 }
 
+/// ================================
 /// 💬 COMMENTS
-Future<void> addCommentToEvent(String eventId, event.CommentModel comment) async {
+/// ================================
+
+Future<void> addCommentToEvent(
+  String eventId,
+  event.CommentModel comment,
+) async {
   await _db.collection('events').doc(eventId).update({
     'comments': FieldValue.arrayUnion([comment.toMap()]),
   });
@@ -311,24 +374,24 @@ Future<void> toggleCommentLike({
   required String userId,
 }) async {
   final ref = _db.collection('events').doc(eventId);
+
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    if (!snap.exists) return;
+    if (!snap.exists || snap.data() == null) return;
 
-    final data = snap.data()!;
-    final List comments = List.from(data['comments'] ?? []);
+    final List comments =
+        List<Map<String, dynamic>>.from(snap.data()!['comments'] ?? []);
 
     for (final c in comments) {
       if (c['id'] == commentId) {
         final likes = List<String>.from(c['likes'] ?? []);
         final dislikes = List<String>.from(c['dislikes'] ?? []);
 
-        if (likes.contains(userId)) {
-          likes.remove(userId);
-        } else {
-          likes.add(userId);
-          dislikes.remove(userId);
-        }
+        likes.contains(userId)
+            ? likes.remove(userId)
+            : likes.add(userId);
+
+        dislikes.remove(userId);
 
         c['likes'] = likes;
         c['dislikes'] = dislikes;
@@ -346,24 +409,24 @@ Future<void> toggleCommentDislike({
   required String userId,
 }) async {
   final ref = _db.collection('events').doc(eventId);
+
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    if (!snap.exists) return;
+    if (!snap.exists || snap.data() == null) return;
 
-    final data = snap.data()!;
-    final List comments = List.from(data['comments'] ?? []);
+    final List comments =
+        List<Map<String, dynamic>>.from(snap.data()!['comments'] ?? []);
 
     for (final c in comments) {
       if (c['id'] == commentId) {
         final likes = List<String>.from(c['likes'] ?? []);
         final dislikes = List<String>.from(c['dislikes'] ?? []);
 
-        if (dislikes.contains(userId)) {
-          dislikes.remove(userId);
-        } else {
-          dislikes.add(userId);
-          likes.remove(userId);
-        }
+        dislikes.contains(userId)
+            ? dislikes.remove(userId)
+            : dislikes.add(userId);
+
+        likes.remove(userId);
 
         c['likes'] = likes;
         c['dislikes'] = dislikes;
@@ -375,18 +438,19 @@ Future<void> toggleCommentDislike({
   });
 }
 
-/// 💬 Delete comment
+/// 🗑️ Delete comment
 Future<void> deleteComment({
   required String eventId,
   required String commentId,
 }) async {
   final ref = _db.collection('events').doc(eventId);
+
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    if (!snap.exists) return;
+    if (!snap.exists || snap.data() == null) return;
 
-    final data = snap.data()!;
-    final List comments = List.from(data['comments'] ?? []);
+    final List comments =
+        List<Map<String, dynamic>>.from(snap.data()!['comments'] ?? []);
 
     comments.removeWhere((c) => c['id'] == commentId);
 
@@ -419,6 +483,150 @@ Future<void> deleteComment({
   Future<void> deleteUser(String id) async {
     await _db.collection('users').doc(id).delete();
   }
+
+
+  // ================= REPORTS =================
+
+Stream<QuerySnapshot> reportedUsersStream() {
+  return _db
+      .collection('users')
+      .where('reportCount', isGreaterThan: 0)
+      .orderBy('reportCount', descending: true)
+      .snapshots();
+}
+
+Future<void> warnUser(String userId) async {
+  final ref = _db.collection('users').doc(userId);
+
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    if (!snap.exists) return;
+
+    final currentWarnings = snap['warningCount'] ?? 0;
+    tx.update(ref, {
+      'warningCount': currentWarnings + 1,
+    });
+  });
+}
+
+Future<void> tempBanUser(String userId, int days) async {
+  await _db.collection('users').doc(userId).update({
+    'isBanned': true,
+    'banUntil': Timestamp.fromDate(
+      DateTime.now().add(Duration(days: days)),
+    ),
+  });
+}
+
+Future<void> unbanIfExpired(String userId) async {
+  final doc = await _db.collection('users').doc(userId).get();
+  if (!doc.exists) return;
+
+  final banUntil = doc['banUntil'];
+  if (banUntil != null && banUntil.toDate().isBefore(DateTime.now())) {
+    await _db.collection('users').doc(userId).update({
+      'isBanned': false,
+      'banUntil': null,
+    });
+  }
+}
+
+Future<void> deleteUserCompletely(String userId) async {
+  // Delete user document
+  await _db.collection('users').doc(userId).delete();
+
+  // Delete reports against user
+  final reports = await _db
+      .collection('reports')
+      .where('reportedUserId', isEqualTo: userId)
+      .get();
+
+  for (final doc in reports.docs) {
+    await doc.reference.delete();
+  }
+}
+
+Future<void> reportComment({
+  required String eventId,
+  required String commentId,
+  required String reportedUserId,
+  required String reportedBy,
+  required String reason,
+}) async {
+  // Prevent duplicate reports
+  final existing = await _db
+      .collection('reports')
+      .where('type', isEqualTo: 'comment')
+      .where('commentId', isEqualTo: commentId)
+      .where('reportedBy', isEqualTo: reportedBy)
+      .limit(1)
+      .get();
+
+  if (existing.docs.isNotEmpty) {
+    throw Exception('You already reported this comment.');
+  }
+
+  // Create report
+  await _db.collection('reports').add({
+    'type': 'comment',
+    'eventId': eventId,
+    'commentId': commentId,
+    'reportedUserId': reportedUserId,
+    'reportedBy': reportedBy,
+    'reason': reason,
+    'createdAt': Timestamp.now(),
+  });
+
+  // Increment report count on user
+  await _db.collection('users').doc(reportedUserId).update({
+    'reportCount': FieldValue.increment(1),
+  });
+}
+
+Future<void> reportUser({
+  required String reportedUserId,
+  required String reportedBy,
+  required String reason,
+  String? eventId,
+}) async {
+  // Prevent self-report
+  if (reportedUserId == reportedBy) {
+    throw Exception("You can't report yourself.");
+  }
+
+  // Prevent duplicate reports for same event (if provided)
+  Query query = _db
+      .collection('reports')
+      .where('type', isEqualTo: 'user')
+      .where('reportedUserId', isEqualTo: reportedUserId)
+      .where('reportedBy', isEqualTo: reportedBy);
+
+  if (eventId != null) {
+    query = query.where('eventId', isEqualTo: eventId);
+  }
+
+  final existing = await query.limit(1).get();
+  if (existing.docs.isNotEmpty) {
+    throw Exception('You already reported this user.');
+  }
+
+  // Create report
+  await _db.collection('reports').add({
+    'type': 'user',
+    'reportedUserId': reportedUserId,
+    'reportedBy': reportedBy,
+    'eventId': eventId,
+    'reason': reason,
+    'createdAt': Timestamp.now(),
+  });
+
+  // Increment report count
+  await _db.collection('users').doc(reportedUserId).update({
+    'reportCount': FieldValue.increment(1),
+  });
+}
+
+
 
     /// ================================
   /// 🔍 SEARCH

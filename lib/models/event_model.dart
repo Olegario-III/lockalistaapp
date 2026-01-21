@@ -18,23 +18,25 @@ class CommentModel {
     required this.timestamp,
     List<String>? likes,
     List<String>? dislikes,
-  })  : likes = likes ?? [],
-        dislikes = dislikes ?? [];
+  })  : likes = likes ?? const [],
+        dislikes = dislikes ?? const [];
 
+  /// 🔄 Firestore → Model
   factory CommentModel.fromMap(Map<String, dynamic> map) {
     return CommentModel(
       id: map['id'] ?? '',
-      // 🔁 supports both `uid` and `userId`
+      // supports both old & new field names
       userId: map['userId'] ?? map['uid'] ?? '',
       content: map['content'] ?? '',
-      timestamp: map['timestamp'] != null
+      timestamp: map['timestamp'] is Timestamp
           ? (map['timestamp'] as Timestamp).toDate()
           : DateTime.now(),
-      likes: List<String>.from(map['likes'] ?? []),
-      dislikes: List<String>.from(map['dislikes'] ?? []),
+      likes: List<String>.from(map['likes'] ?? const []),
+      dislikes: List<String>.from(map['dislikes'] ?? const []),
     );
   }
 
+  /// 🔼 Model → Firestore
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -58,15 +60,16 @@ class EventModel {
   /// 🔑 Event owner
   final String ownerId;
 
-  /// ✅ Alias (prevents undefined getter errors)
+  /// ✅ Alias to prevent undefined getter errors
   String get userId => ownerId;
 
-  /// 👤 Snapshot user info (FIXES avatar & name)
+  /// 👤 Snapshot user info
   final String ownerName;
   final String? ownerAvatar;
 
   final String? imageUrl;
-  final DateTime timestamp;
+
+  final DateTime createdAt;
   final DateTime startDate;
   final DateTime endDate;
 
@@ -89,7 +92,7 @@ class EventModel {
     required this.ownerName,
     this.ownerAvatar,
     this.imageUrl,
-    required this.timestamp,
+    required this.createdAt,
     required this.startDate,
     required this.endDate,
     required this.status,
@@ -98,9 +101,9 @@ class EventModel {
     List<String>? likesList,
     int? likesCount,
     List<CommentModel>? comments,
-  })  : likesList = likesList ?? [],
+  })  : likesList = likesList ?? const [],
         likesCount = likesCount ?? 0,
-        comments = comments ?? [];
+        comments = comments ?? const [];
 
   /// 🔄 Firestore → Model
   factory EventModel.fromMap(Map<String, dynamic> map, String id) {
@@ -109,23 +112,34 @@ class EventModel {
       title: map['title'] ?? '',
       description: map['description'] ?? '',
 
-      // 🔁 supports old + new field names
+      // supports legacy + current field names
       ownerId: map['ownerId'] ?? map['userId'] ?? '',
       ownerName: map['ownerName'] ?? 'Unknown',
-      ownerAvatar: map['ownerAvatar'] ?? map['ownerAvatarUrl'],
+      ownerAvatar:
+          map['ownerAvatar'] ?? map['ownerAvatarUrl'] ?? null,
 
       imageUrl: map['imageUrl'],
-      timestamp: map['createdAt'] != null
+
+      createdAt: map['createdAt'] is Timestamp
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
-      startDate: (map['startDate'] as Timestamp).toDate(),
-      endDate: (map['endDate'] as Timestamp).toDate(),
+
+      startDate: map['startDate'] is Timestamp
+          ? (map['startDate'] as Timestamp).toDate()
+          : DateTime.now(),
+
+      endDate: map['endDate'] is Timestamp
+          ? (map['endDate'] as Timestamp).toDate()
+          : DateTime.now(),
+
       status: map['status'] ?? 'pending',
       approvedBy: map['approvedBy'],
       approvedByName: map['approvedByName'],
-      likesList: List<String>.from(map['likesList'] ?? []),
+
+      likesList: List<String>.from(map['likesList'] ?? const []),
       likesCount: map['likesCount'] ?? 0,
-      comments: (map['comments'] as List<dynamic>? ?? [])
+
+      comments: (map['comments'] as List<dynamic>? ?? const [])
           .map(
             (c) => CommentModel.fromMap(
               Map<String, dynamic>.from(c),
@@ -144,7 +158,7 @@ class EventModel {
       'ownerName': ownerName,
       'ownerAvatar': ownerAvatar,
       'imageUrl': imageUrl,
-      'createdAt': Timestamp.fromDate(timestamp),
+      'createdAt': Timestamp.fromDate(createdAt),
       'startDate': Timestamp.fromDate(startDate),
       'endDate': Timestamp.fromDate(endDate),
       'status': status,

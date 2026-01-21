@@ -34,7 +34,9 @@ class _EditEventPageState extends State<EditEventPage> {
     super.initState();
     _titleCtrl.text = widget.event.title;
     _descCtrl.text = widget.event.description;
-    _selectedDate = widget.event.timestamp;
+
+    // 🔑 Use startDate (or whichever field you want to allow editing)
+    _selectedDate = widget.event.startDate; 
   }
 
   // ────────────────────────────────
@@ -72,7 +74,7 @@ class _EditEventPageState extends State<EditEventPage> {
       return;
     }
 
-    if (user.uid != widget.event.userId) {
+    if (user.uid != widget.event.ownerId) {
       _snack('Only the event owner can edit this');
       return;
     }
@@ -100,7 +102,7 @@ class _EditEventPageState extends State<EditEventPage> {
         'title': _titleCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
         'imageUrl': imageUrl,
-        'eventDate': _selectedDate,
+        'startDate': _selectedDate, // 🔑 updated
         'status': 'pending', // ⛔ requires admin re-approval
         'updatedAt': DateTime.now(),
       };

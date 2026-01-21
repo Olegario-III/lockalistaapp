@@ -18,7 +18,6 @@ class EventListPage extends StatefulWidget {
 class _EventListPageState extends State<EventListPage> {
   final FirestoreService _service = FirestoreService.instance;
   final User? currentUser = FirebaseAuth.instance.currentUser;
-
   bool isAdmin = false;
 
   @override
@@ -36,6 +35,7 @@ class _EventListPageState extends State<EventListPage> {
         .get();
 
     if (doc.exists && doc.data()?['role'] == 'admin') {
+      if (!mounted) return;
       setState(() => isAdmin = true);
     }
   }
@@ -60,6 +60,88 @@ class _EventListPageState extends State<EventListPage> {
       'name': data?['name'] ?? 'Unknown',
       'avatar': data?['image'],
     };
+  }
+
+  /// 🚩 Report event owner
+  Future<void> _reportEventOwner(em.EventModel event) async {
+    if (currentUser == null) return;
+
+    if (currentUser!.uid == event.ownerId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You can't report yourself")),
+      );
+      return;
+    }
+
+    final reasons = [
+      'Spam',
+      'Harassment',
+      'Scam',
+      'Inappropriate content',
+      'Fake event',
+    ];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        String? selectedReason; // move inside builder for proper StatefulBuilder
+        return StatefulBuilder(
+          builder: (context, setStateSB) {
+            return AlertDialog(
+              title: const Text('Report Event Owner'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: reasons.map((reason) {
+                  return RadioListTile<String>(
+                    title: Text(reason),
+                    value: reason,
+                    groupValue: selectedReason,
+                    onChanged: (value) {
+                      setStateSB(() {
+                        selectedReason = value;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedReason == null
+                      ? null
+                      : () => Navigator.pop(context, true),
+                  child: const Text('Report'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || currentUser == null) return;
+
+    try {
+      await _service.reportUser(
+        reportedUserId: event.ownerId,
+        reportedBy: currentUser!.uid,
+        eventId: event.id,
+        reason: confirmed ? 'User reported' : '', // optional, can pass selectedReason if needed
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User reported successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
   @override
@@ -101,27 +183,6 @@ class _EventListPageState extends State<EventListPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ✅ Approval info
-                        if (e.approvedByName != null &&
-                            e.approvedByName!.isNotEmpty)
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade100,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              'Approved by: ${e.approvedByName}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                              ),
-                            ),
-                          ),
-
                         // 👤 Poster info
                         ListTile(
                           leading: GestureDetector(
@@ -148,44 +209,55 @@ class _EventListPageState extends State<EventListPage> {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
-                            e.timestamp
-                                .toLocal()
-                                .toString()
-                                .split(' ')[0],
+                            _formatDate(e.startDate),
                             style: const TextStyle(fontSize: 12),
                           ),
-                          trailing: canDelete
-                              ? IconButton(
-                                  icon: const Icon(Icons.delete,
-                                      color: Colors.red),
-                                  onPressed: () async {
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (_) => AlertDialog(
-                                        title: const Text('Delete Event'),
-                                        content: const Text(
-                                            'Are you sure you want to delete this event?'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            child: const Text('Cancel'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
-                                            child: const Text('Delete'),
-                                          ),
-                                        ],
+                          trailing: PopupMenuButton<String>(
+                            onSelected: (value) async {
+                              if (value == 'report') {
+                                await _reportEventOwner(e);
+                              }
+                              if (value == 'delete') {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('Delete Event'),
+                                    content: const Text(
+                                      'Are you sure you want to delete this event?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
                                       ),
-                                    );
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
 
-                                    if (confirm == true) {
-                                      await _service.deleteEvent(e.id);
-                                    }
-                                  },
-                                )
-                              : null,
+                                if (confirm == true) {
+                                  await _service.deleteEvent(e.id);
+                                }
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              if (!canDelete)
+                                const PopupMenuItem(
+                                  value: 'report',
+                                  child: Text('🚩 Report User'),
+                                ),
+                              if (canDelete)
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('🗑 Delete Event'),
+                                ),
+                            ],
+                          ),
                         ),
 
                         // 🖼 Event image
@@ -270,5 +342,10 @@ class _EventListPageState extends State<EventListPage> {
         },
       ),
     );
+  }
+
+  // ✅ Format DateTime
+  String _formatDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }

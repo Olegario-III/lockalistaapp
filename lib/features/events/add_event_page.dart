@@ -130,18 +130,18 @@ class _AddEventPageState extends State<AddEventPage> {
       final firestore = FirestoreService.instance;
       final eventId = firestore.generateId('events');
 
+      // ────────────────────────────────
+      // ✅ CREATE EVENT MODEL (DateTime used)
+      // ────────────────────────────────
       final event = EventModel(
         id: eventId,
         title: titleCtrl.text.trim(),
         description: descCtrl.text.trim(),
-
-        // ✅ CORRECT USER DATA
         ownerId: currentUser.uid,
         ownerName: ownerName,
         ownerAvatar: ownerAvatar,
-
         imageUrl: imageUrl,
-        timestamp: DateTime.now(),
+        createdAt: DateTime.now(), // <- REQUIRED
         startDate: _startDate!,
         endDate: _endDate!,
         status: 'pending',
@@ -150,7 +150,7 @@ class _AddEventPageState extends State<AddEventPage> {
         comments: const [],
       );
 
-      await firestore.addEvent(event, eventId);
+      await firestore.addEvent(event, currentUser.uid);
 
       if (!mounted) return;
 

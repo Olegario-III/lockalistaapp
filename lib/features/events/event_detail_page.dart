@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../models/event_model.dart';
 import '../../core/services/firestore_service.dart';
+import 'edit_event_page.dart';
 
 class EventDetailPage extends StatefulWidget {
   final EventModel event;
@@ -40,7 +41,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
     }
   }
 
-  /// Load event owner profile
   Future<Map<String, String?>> _loadOwnerProfile() async {
     if (widget.event.ownerName.isNotEmpty) {
       return {
@@ -62,7 +62,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
     };
   }
 
-  /// Load comment user's name & avatar
   Future<Map<String, String?>> _loadCommentUser(String userId) async {
     final doc = await FirebaseFirestore.instance
         .collection('users')
@@ -76,7 +75,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
     };
   }
 
-  /// Add comment
   Future<void> _addComment() async {
     if (_commentCtrl.text.trim().isEmpty || currentUser == null) return;
 
@@ -103,14 +101,84 @@ class _EventDetailPageState extends State<EventDetailPage> {
     });
   }
 
-  /// Report comment
-  void _reportComment(CommentModel comment) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Reported comment: ${comment.content}')),
+  Future<void> _reportComment(CommentModel comment) async {
+    if (currentUser == null) return;
+
+    if (currentUser!.uid == comment.userId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You can't report your own comment")),
+      );
+      return;
+    }
+
+    const reasons = [
+      'Spam',
+      'Harassment',
+      'Hate speech',
+      'Inappropriate content',
+      'Scam',
+    ];
+
+    String? selectedReason;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Report Comment'),
+        content: StatefulBuilder(
+          builder: (context, setState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: reasons.map((reason) {
+                return RadioListTile<String>(
+                  title: Text(reason),
+                  value: reason,
+                  groupValue: selectedReason,
+                  onChanged: (value) {
+                    setState(() => selectedReason = value);
+                  },
+                );
+              }).toList(),
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: selectedReason == null
+                ? null
+                : () => Navigator.pop(context, true),
+            child: const Text('Report'),
+          ),
+        ],
+      ),
     );
+
+    if (confirmed != true || selectedReason == null) return;
+
+    try {
+      await FirestoreService.instance.reportComment(
+        eventId: widget.event.id,
+        commentId: comment.id,
+        reportedUserId: comment.userId,
+        reportedBy: currentUser!.uid,
+        reason: selectedReason!,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Comment reported successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
 
-  /// Like/dislike comment
   Future<void> _toggleLike(CommentModel comment) async {
     if (currentUser == null) return;
 
@@ -163,7 +231,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
     });
   }
 
-  /// Delete comment
   Future<void> _deleteComment(CommentModel comment) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -200,7 +267,24 @@ class _EventDetailPageState extends State<EventDetailPage> {
     final event = widget.event;
 
     return Scaffold(
-      appBar: AppBar(title: Text(event.title)),
+      appBar: AppBar(
+        title: Text(event.title),
+        actions: [
+          if (currentUser != null && currentUser!.uid == event.ownerId)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              tooltip: 'Edit Event',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditEventPage(event: event),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
