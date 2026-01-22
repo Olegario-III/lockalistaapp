@@ -102,32 +102,33 @@ class _EventDetailPageState extends State<EventDetailPage> {
   }
 
   Future<void> _reportComment(CommentModel comment) async {
-    if (currentUser == null) return;
+  if (currentUser == null) return;
 
-    if (currentUser!.uid == comment.userId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You can't report your own comment")),
-      );
-      return;
-    }
+  if (currentUser!.uid == comment.userId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("You can't report your own comment")),
+    );
+    return;
+  }
 
-    const reasons = [
-      'Spam',
-      'Harassment',
-      'Hate speech',
-      'Inappropriate content',
-      'Scam',
-    ];
+  const reasons = [
+    'Spam',
+    'Harassment',
+    'Hate speech',
+    'Inappropriate content',
+    'Scam',
+  ];
 
-    String? selectedReason;
+  String? selectedReason;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Report Comment'),
-        content: StatefulBuilder(
-          builder: (context, setState) {
-            return Column(
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Report Comment'),
+            content: Column(
               mainAxisSize: MainAxisSize.min,
               children: reasons.map((reason) {
                 return RadioListTile<String>(
@@ -135,49 +136,54 @@ class _EventDetailPageState extends State<EventDetailPage> {
                   value: reason,
                   groupValue: selectedReason,
                   onChanged: (value) {
-                    setState(() => selectedReason = value);
+                    setState(() {
+                      selectedReason = value;
+                    });
                   },
                 );
               }).toList(),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: selectedReason == null
-                ? null
-                : () => Navigator.pop(context, true),
-            child: const Text('Report'),
-          ),
-        ],
-      ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: selectedReason == null
+                    ? null
+                    : () => Navigator.pop(context, true),
+                child: const Text('Report'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  if (confirmed != true || selectedReason == null) return;
+
+  try {
+    await FirestoreService.instance.reportComment(
+      eventId: widget.event.id,
+      commentId: comment.id,
+      reportedUserId: comment.userId,
+      reportedBy: currentUser!.uid,
+      reason: selectedReason!,
     );
 
-    if (confirmed != true || selectedReason == null) return;
-
-    try {
-      await FirestoreService.instance.reportComment(
-        eventId: widget.event.id,
-        commentId: comment.id,
-        reportedUserId: comment.userId,
-        reportedBy: currentUser!.uid,
-        reason: selectedReason!,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Comment reported successfully')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Comment reported successfully')),
+    );
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(e.toString().replaceFirst('Exception: ', '')),
+      ),
+    );
   }
+}
 
   Future<void> _toggleLike(CommentModel comment) async {
     if (currentUser == null) return;

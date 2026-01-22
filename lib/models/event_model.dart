@@ -116,7 +116,7 @@ class EventModel {
       ownerId: map['ownerId'] ?? map['userId'] ?? '',
       ownerName: map['ownerName'] ?? 'Unknown',
       ownerAvatar:
-          map['ownerAvatar'] ?? map['ownerAvatarUrl'] ?? null,
+          map['ownerAvatar'] ?? map['ownerAvatarUrl'],
 
       imageUrl: map['imageUrl'],
 

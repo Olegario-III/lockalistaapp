@@ -18,6 +18,7 @@ class EventListPage extends StatefulWidget {
 class _EventListPageState extends State<EventListPage> {
   final FirestoreService _service = FirestoreService.instance;
   final User? currentUser = FirebaseAuth.instance.currentUser;
+
   bool isAdmin = false;
 
   @override
@@ -34,10 +35,11 @@ class _EventListPageState extends State<EventListPage> {
         .doc(currentUser!.uid)
         .get();
 
-    if (doc.exists && doc.data()?['role'] == 'admin') {
-      if (!mounted) return;
-      setState(() => isAdmin = true);
-    }
+    if (!mounted) return;
+
+    setState(() {
+      isAdmin = doc.data()?['role'] == 'admin';
+    });
   }
 
   /// 🔁 Fallback ONLY for old events
@@ -81,10 +83,11 @@ class _EventListPageState extends State<EventListPage> {
       'Fake event',
     ];
 
-    final confirmed = await showDialog<bool>(
+    final String? selectedReason = await showDialog<String>(
       context: context,
       builder: (context) {
-        String? selectedReason; // move inside builder for proper StatefulBuilder
+        String? tempReason;
+
         return StatefulBuilder(
           builder: (context, setStateSB) {
             return AlertDialog(
@@ -95,24 +98,22 @@ class _EventListPageState extends State<EventListPage> {
                   return RadioListTile<String>(
                     title: Text(reason),
                     value: reason,
-                    groupValue: selectedReason,
+                    groupValue: tempReason,
                     onChanged: (value) {
-                      setStateSB(() {
-                        selectedReason = value;
-                      });
+                      setStateSB(() => tempReason = value);
                     },
                   );
                 }).toList(),
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context, false),
+                  onPressed: () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: selectedReason == null
+                  onPressed: tempReason == null
                       ? null
-                      : () => Navigator.pop(context, true),
+                      : () => Navigator.pop(context, tempReason),
                   child: const Text('Report'),
                 ),
               ],
@@ -122,24 +123,26 @@ class _EventListPageState extends State<EventListPage> {
       },
     );
 
-    if (confirmed != true || currentUser == null) return;
+    if (selectedReason == null) return;
 
     try {
       await _service.reportUser(
         reportedUserId: event.ownerId,
         reportedBy: currentUser!.uid,
         eventId: event.id,
-        reason: confirmed ? 'User reported' : '', // optional, can pass selectedReason if needed
+        reason: selectedReason,
       );
 
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('User reported successfully')),
       );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(e.toString())),
       );
     }
   }
@@ -156,13 +159,14 @@ class _EventListPageState extends State<EventListPage> {
           }
 
           final events = snapshot.data ?? [];
+
           if (events.isEmpty) {
             return const Center(child: Text('No events yet.'));
           }
 
           return ListView.separated(
-            itemCount: events.length,
             padding: const EdgeInsets.all(8),
+            itemCount: events.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final e = events[index];
@@ -176,14 +180,13 @@ class _EventListPageState extends State<EventListPage> {
                   final posterAvatar = userSnap.data?['avatar'];
 
                   return Card(
-                    elevation: 3,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 3,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 👤 Poster info
                         ListTile(
                           leading: GestureDetector(
                             onTap: () {
@@ -208,23 +211,18 @@ class _EventListPageState extends State<EventListPage> {
                             posterName,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          subtitle: Text(
-                            _formatDate(e.startDate),
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                          subtitle: Text(_formatDate(e.startDate)),
                           trailing: PopupMenuButton<String>(
                             onSelected: (value) async {
                               if (value == 'report') {
                                 await _reportEventOwner(e);
-                              }
-                              if (value == 'delete') {
+                              } else if (value == 'delete') {
                                 final confirm = await showDialog<bool>(
                                   context: context,
                                   builder: (_) => AlertDialog(
                                     title: const Text('Delete Event'),
                                     content: const Text(
-                                      'Are you sure you want to delete this event?',
-                                    ),
+                                        'Are you sure you want to delete this event?'),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
@@ -245,7 +243,7 @@ class _EventListPageState extends State<EventListPage> {
                                 }
                               }
                             },
-                            itemBuilder: (context) => [
+                            itemBuilder: (_) => [
                               if (!canDelete)
                                 const PopupMenuItem(
                                   value: 'report',
@@ -260,8 +258,7 @@ class _EventListPageState extends State<EventListPage> {
                           ),
                         ),
 
-                        // 🖼 Event image
-                        if (e.imageUrl != null && e.imageUrl!.isNotEmpty)
+                        if (e.imageUrl?.isNotEmpty == true)
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Image.network(
@@ -272,7 +269,6 @@ class _EventListPageState extends State<EventListPage> {
                             ),
                           ),
 
-                        // 📝 Title & description
                         Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
@@ -281,20 +277,15 @@ class _EventListPageState extends State<EventListPage> {
                               Text(
                                 e.title,
                                 style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                e.description,
-                                style: const TextStyle(fontSize: 14),
-                              ),
+                              Text(e.description),
                             ],
                           ),
                         ),
 
-                        // ❤️ Likes & 💬 Comments
                         Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 4),
@@ -314,8 +305,6 @@ class _EventListPageState extends State<EventListPage> {
                                 },
                               ),
                               Text('${e.likesCount}'),
-                              const SizedBox(width: 16),
-                              Text('${e.comments.length} 💬'),
                               const Spacer(),
                               TextButton(
                                 onPressed: () {
@@ -344,7 +333,6 @@ class _EventListPageState extends State<EventListPage> {
     );
   }
 
-  // ✅ Format DateTime
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }

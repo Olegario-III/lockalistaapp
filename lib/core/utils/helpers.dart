@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart'; // for BuildContext, ScaffoldMessenger, SnackBar, Text
 import 'package:geolocator/geolocator.dart';
+import 'package:lockalista/features/stores/pick_location_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // for GeoPoint
@@ -10,10 +11,12 @@ class Helpers {
         desiredAccuracy: LocationAccuracy.high);
   }
 
-  static Future<GeoPoint?> pickLocationOnMap() async {
-    // TODO: implement Google Maps picker
-    return null;
-  }
+  static Future<GeoPoint?> pickLocationOnMap(BuildContext context) async {
+  return await Navigator.push<GeoPoint>(
+    context,
+    MaterialPageRoute(builder: (_) => const PickLocationPage()),
+  );
+}
 
   static void openMap(double lat, double lng) {
     final url = Uri.parse(

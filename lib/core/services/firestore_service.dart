@@ -22,7 +22,7 @@ class FirestoreService {
     return _db.collection(collectionPath).doc().id;
   }
 
-  /// ================================
+ /// ================================
 /// 🏪 STORES
 /// ================================
 
@@ -38,28 +38,22 @@ Future<List<store.StoreModel>> getStores() async {
 Stream<List<store.StoreModel>> getApprovedStoresStream() {
   return _db
       .collection('stores')
-      .where('status', isEqualTo: 'approved')
+      .where('approved', isEqualTo: true)
       .snapshots()
-      .map(
-        (snapshot) => snapshot.docs
-            .map((doc) =>
-                store.StoreModel.fromMap(doc.data(), doc.id))
-            .toList(),
-      );
+      .map((snapshot) => snapshot.docs
+          .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
+          .toList());
 }
 
 /// Get ONLY pending stores (admin dashboard)
 Stream<List<store.StoreModel>> getPendingStoresStream() {
   return _db
       .collection('stores')
-      .where('status', isEqualTo: 'pending')
+      .where('approved', isEqualTo: false)
       .snapshots()
-      .map(
-        (snapshot) => snapshot.docs
-            .map((doc) =>
-                store.StoreModel.fromMap(doc.data(), doc.id))
-            .toList(),
-      );
+      .map((snapshot) => snapshot.docs
+          .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
+          .toList());
 }
 
 /// Get store by ID
@@ -73,7 +67,7 @@ Future<store.StoreModel?> getStoreById(String id) async {
 Future<void> addStore(store.StoreModel store) async {
   await _db.collection('stores').add({
     ...store.toMap(),
-    'status': 'pending',
+    'approved': false, // new store starts as pending
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
@@ -91,7 +85,7 @@ Future<void> deleteStore(String id) async {
 /// ✅ Admin approves store
 Future<void> approveStore(String id) async {
   await _db.collection('stores').doc(id).update({
-    'status': 'approved',
+    'approved': true,
     'approvedAt': FieldValue.serverTimestamp(),
   });
 }
@@ -99,7 +93,8 @@ Future<void> approveStore(String id) async {
 /// ❌ Admin rejects store
 Future<void> rejectStore(String id) async {
   await _db.collection('stores').doc(id).update({
-    'status': 'rejected',
+    'approved': false,
+    'rejectedAt': FieldValue.serverTimestamp(),
   });
 }
 
@@ -122,13 +117,11 @@ Future<void> rateStore(String storeId, double rating) async {
     if (!snap.exists) return;
 
     final data = snap.data()!;
-    final double currentRating =
-        (data['rating'] ?? 0).toDouble();
+    final double currentRating = (data['rating'] ?? 0).toDouble();
     final int count = (data['ratingCount'] ?? 0);
 
     final newCount = count + 1;
-    final newRating =
-        ((currentRating * count) + rating) / newCount;
+    final newRating = ((currentRating * count) + rating) / newCount;
 
     tx.update(ref, {
       'rating': newRating,
@@ -146,6 +139,8 @@ Future<void> reportStore(String storeId, String userId) async {
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
+
+
 
  /// ================================
 /// 📅 EVENTS
@@ -589,17 +584,18 @@ Future<void> reportUser({
   required String reason,
   String? eventId,
 }) async {
-  // Prevent self-report
+  // 🚫 Prevent self-report
   if (reportedUserId == reportedBy) {
     throw Exception("You can't report yourself.");
   }
 
-  // Prevent duplicate reports for same event (if provided)
-  Query query = _db
-      .collection('reports')
-      .where('type', isEqualTo: 'user')
+  final reportsRef = _db.collection('reports');
+
+  // 🔁 Prevent duplicate report (same user + same reporter + same event)
+  Query query = reportsRef
       .where('reportedUserId', isEqualTo: reportedUserId)
-      .where('reportedBy', isEqualTo: reportedBy);
+      .where('reportedBy', isEqualTo: reportedBy)
+      .where('type', isEqualTo: 'event');
 
   if (eventId != null) {
     query = query.where('eventId', isEqualTo: eventId);
@@ -607,23 +603,24 @@ Future<void> reportUser({
 
   final existing = await query.limit(1).get();
   if (existing.docs.isNotEmpty) {
-    throw Exception('You already reported this user.');
+    throw Exception('You already reported this user for this event.');
   }
 
-  // Create report
-  await _db.collection('reports').add({
-    'type': 'user',
+  // 📝 Create report
+  await reportsRef.add({
+    'type': 'event',
     'reportedUserId': reportedUserId,
     'reportedBy': reportedBy,
     'eventId': eventId,
     'reason': reason,
-    'createdAt': Timestamp.now(),
+    'status': 'pending', // for admin review
+    'createdAt': FieldValue.serverTimestamp(),
   });
 
-  // Increment report count
-  await _db.collection('users').doc(reportedUserId).update({
+  // 📊 Increment report count safely
+  await _db.collection('users').doc(reportedUserId).set({
     'reportCount': FieldValue.increment(1),
-  });
+  }, SetOptions(merge: true));
 }
 
 

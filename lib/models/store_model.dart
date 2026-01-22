@@ -15,7 +15,7 @@ class StoreModel {
   final List<CommentModel> comments;
   final String? description;
 
-  // ✅ NEW
+  /// ✅ Support multiple images
   final List<String> images;
 
   StoreModel({
@@ -39,6 +39,7 @@ class StoreModel {
   double get averageRating =>
       ratingCount == 0 ? 0.0 : rating / ratingCount;
 
+  /// 🔹 Convert Firestore map to model
   factory StoreModel.fromMap(Map<String, dynamic> map, String id) {
     return StoreModel(
       id: id,
@@ -60,6 +61,7 @@ class StoreModel {
     );
   }
 
+  /// 🔹 Convert model to Firestore map
   Map<String, dynamic> toMap() {
     return {
       'name': name,
