@@ -67,12 +67,12 @@ Future<store.StoreModel?> getStoreById(String id) async {
 Future<void> addStore(store.StoreModel store) async {
   await _db.collection('stores').add({
     ...store.toMap(),
-    'approved': false, // new store starts as pending
+    'approved': false,
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
 
-/// Update store (edit)
+/// Update store
 Future<void> updateStore(String id, store.StoreModel store) async {
   await _db.collection('stores').doc(id).update(store.toMap());
 }
@@ -98,44 +98,116 @@ Future<void> rejectStore(String id) async {
   });
 }
 
-/// 💬 Add comment to store
+/// Stream store comments
+Stream<QuerySnapshot> storeCommentsStream(String storeId) {
+  return _db
+      .collection('stores')
+      .doc(storeId)
+      .collection('comments')
+      .orderBy('createdAt', descending: true)
+      .snapshots();
+}
+
+/// Add comment
 Future<void> addStoreComment(
   String storeId,
   store.CommentModel comment,
 ) async {
-  await _db.collection('stores').doc(storeId).update({
-    'comments': FieldValue.arrayUnion([comment.toMap()]),
-  });
+  await _db
+      .collection('stores')
+      .doc(storeId)
+      .collection('comments')
+      .doc(comment.id)
+      .set(comment.toMap());
 }
 
-/// ⭐ Rate store (average rating logic)
-Future<void> rateStore(String storeId, double rating) async {
-  final ref = _db.collection('stores').doc(storeId);
+/// Delete comment
+Future<void> deleteStoreComment(
+  String storeId,
+  String commentId,
+) async {
+  await _db
+      .collection('stores')
+      .doc(storeId)
+      .collection('comments')
+      .doc(commentId)
+      .delete();
+}
+
+Future<void> toggleStoreCommentLike({
+  required String storeId,
+  required String commentId,
+  required String userId,
+}) async {
+  final ref = _db
+      .collection('stores')
+      .doc(storeId)
+      .collection('comments')
+      .doc(commentId);
 
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    if (!snap.exists) return;
-
     final data = snap.data()!;
-    final double currentRating = (data['rating'] ?? 0).toDouble();
-    final int count = (data['ratingCount'] ?? 0);
 
-    final newCount = count + 1;
-    final newRating = ((currentRating * count) + rating) / newCount;
+    final likes = List<String>.from(data['likes'] ?? []);
+    final dislikes = List<String>.from(data['dislikes'] ?? []);
+
+    if (likes.contains(userId)) {
+      likes.remove(userId);
+    } else {
+      likes.add(userId);
+      dislikes.remove(userId);
+    }
 
     tx.update(ref, {
-      'rating': newRating,
-      'ratingCount': newCount,
+      'likes': likes,
+      'dislikes': dislikes,
     });
   });
 }
 
-/// 🚨 Report store
-Future<void> reportStore(String storeId, String userId) async {
+Future<void> toggleStoreCommentDislike({
+  required String storeId,
+  required String commentId,
+  required String userId,
+}) async {
+  final ref = _db
+      .collection('stores')
+      .doc(storeId)
+      .collection('comments')
+      .doc(commentId);
+
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    final data = snap.data()!;
+
+    final likes = List<String>.from(data['likes'] ?? []);
+    final dislikes = List<String>.from(data['dislikes'] ?? []);
+
+    if (dislikes.contains(userId)) {
+      dislikes.remove(userId);
+    } else {
+      dislikes.add(userId);
+      likes.remove(userId);
+    }
+
+    tx.update(ref, {
+      'likes': likes,
+      'dislikes': dislikes,
+    });
+  });
+}
+
+Future<void> reportStoreComment({
+  required String storeId,
+  required String commentId,
+  required String reportedBy,
+}) async {
   await _db.collection('reports').add({
+    'type': 'store_comment',
     'storeId': storeId,
-    'reportedBy': userId,
-    'type': 'store',
+    'commentId': commentId,
+    'reportedBy': reportedBy,
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
