@@ -34,6 +34,7 @@ class ApprovalStoresPage extends StatelessWidget {
           }
 
           return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: stores.length,
             itemBuilder: (context, index) {
               final store = stores[index];
@@ -43,26 +44,59 @@ class ApprovalStoresPage extends StatelessWidget {
                   horizontal: 12,
                   vertical: 6,
                 ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
                 child: ListTile(
-                  title: Text(store.name),
-                  subtitle: Text(
-                    'Type: ${store.type}\nBarangay: ${store.barangay}',
+                  contentPadding: const EdgeInsets.all(8),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: store.images.isNotEmpty
+                        ? Image.network(
+                            store.images.first,
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.store, size: 64),
+                          )
+                        : const Icon(Icons.store, size: 64),
                   ),
-                  isThreeLine: true,
+                  title: Text(
+                    store.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      Text('Type: ${store.type}'),
+                      Text('Barangay: ${store.barangay}'),
+                      if (store.address != null)
+                        Text('Address: ${store.address}'),
+                    ],
+                  ),
+                  isThreeLine: store.address != null,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      /// ❌ Reject
+                      // Reject
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
+                        tooltip: 'Reject Store',
                         onPressed: () {
                           firestore.rejectStore(store.id);
                         },
                       ),
 
-                      /// ✅ Approve
+                      // Approve
                       IconButton(
                         icon: const Icon(Icons.check, color: Colors.green),
+                        tooltip: 'Approve Store',
                         onPressed: () {
                           firestore.approveStore(store.id);
                         },
