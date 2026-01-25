@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'comment_model.dart'; // ✅ USE THE SINGLE SOURCE OF TRUTH
 
 class StoreModel {
   final String id;
@@ -10,12 +11,17 @@ class StoreModel {
   final String ownerId;
   final bool approved;
   final List<String> reportedBy;
-  final double rating;        // total rating score
-  final int ratingCount;      // number of ratings
+
+  /// Rating system
+  final double rating;       // total rating score
+  final int ratingCount;     // number of ratings
+
+  /// Comments
   final List<CommentModel> comments;
+
   final String? description;
 
-  /// ✅ Support multiple images
+  /// Support multiple images
   final List<String> images;
 
   StoreModel({
@@ -35,11 +41,15 @@ class StoreModel {
     this.images = const [],
   });
 
-  /// ✅ Computed value used by UI
+  /// ⭐ Average rating (used by UI)
   double get averageRating =>
       ratingCount == 0 ? 0.0 : rating / ratingCount;
 
-  /// 🔹 Convert Firestore map to model
+  /// 🖼️ Main image used by UI (prevents imageUrl error)
+  String get imageUrl =>
+      images.isNotEmpty ? images.first : '';
+
+  /// 🔹 Firestore → Model
   factory StoreModel.fromMap(Map<String, dynamic> map, String id) {
     return StoreModel(
       id: id,
@@ -55,13 +65,13 @@ class StoreModel {
       ratingCount: map['ratingCount'] ?? 0,
       images: List<String>.from(map['images'] ?? []),
       comments: (map['comments'] as List<dynamic>? ?? [])
-          .map((c) => CommentModel.fromMap(c))
+          .map((c) => CommentModel.fromMap(c as Map<String, dynamic>))
           .toList(),
       description: map['description'],
     );
   }
 
-  /// 🔹 Convert model to Firestore map
+  /// 🔹 Model → Firestore
   Map<String, dynamic> toMap() {
     return {
       'name': name,
@@ -77,42 +87,6 @@ class StoreModel {
       'images': images,
       'comments': comments.map((c) => c.toMap()).toList(),
       'description': description,
-    };
-  }
-}
-
-class CommentModel {
-  final String id;
-  final String userId;
-  final String text;
-  final double rating;
-  final Timestamp createdAt;
-
-  CommentModel({
-    required this.id,
-    required this.userId,
-    required this.text,
-    required this.rating,
-    required this.createdAt,
-  });
-
-  factory CommentModel.fromMap(Map<String, dynamic> map) {
-    return CommentModel(
-      id: map['id'] ?? '',
-      userId: map['userId'] ?? '',
-      text: map['text'] ?? '',
-      rating: (map['rating'] ?? 0).toDouble(),
-      createdAt: map['createdAt'] as Timestamp,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'userId': userId,
-      'text': text,
-      'rating': rating,
-      'createdAt': createdAt,
     };
   }
 }

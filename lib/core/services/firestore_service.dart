@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/store_model.dart' as store;
 import '../../models/event_model.dart' as event;
 import '../../models/user_model.dart';
+import '../../models/comment_model.dart';
 
 class FirestoreService {
   // ────────────────────────────────
@@ -24,7 +25,7 @@ class FirestoreService {
 
  /// ================================
 /// 🏪 STORES
-/// ================================
+// ================================
 
 /// Get ALL stores (admin use)
 Future<List<store.StoreModel>> getStores() async {
@@ -40,9 +41,11 @@ Stream<List<store.StoreModel>> getApprovedStoresStream() {
       .collection('stores')
       .where('approved', isEqualTo: true)
       .snapshots()
-      .map((snapshot) => snapshot.docs
-          .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
-          .toList());
+      .map(
+        (snapshot) => snapshot.docs
+            .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
+            .toList(),
+      );
 }
 
 /// Get ONLY pending stores (admin dashboard)
@@ -51,9 +54,11 @@ Stream<List<store.StoreModel>> getPendingStoresStream() {
       .collection('stores')
       .where('approved', isEqualTo: false)
       .snapshots()
-      .map((snapshot) => snapshot.docs
-          .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
-          .toList());
+      .map(
+        (snapshot) => snapshot.docs
+            .map((doc) => store.StoreModel.fromMap(doc.data(), doc.id))
+            .toList(),
+      );
 }
 
 /// Get store by ID
@@ -68,6 +73,8 @@ Future<void> addStore(store.StoreModel store) async {
   await _db.collection('stores').add({
     ...store.toMap(),
     'approved': false,
+    'rating': 0.0,
+    'ratingCount': 0,
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
@@ -98,6 +105,18 @@ Future<void> rejectStore(String id) async {
   });
 }
 
+/// 🚨 Report store
+Future<void> reportStore(String storeId, String reportedBy) async {
+  await _db.collection('reports').add({
+    'type': 'store',
+    'storeId': storeId,
+    'reportedBy': reportedBy,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+/* ================= COMMENTS ================= */
+
 /// Stream store comments
 Stream<QuerySnapshot> storeCommentsStream(String storeId) {
   return _db
@@ -111,7 +130,7 @@ Stream<QuerySnapshot> storeCommentsStream(String storeId) {
 /// Add comment
 Future<void> addStoreComment(
   String storeId,
-  store.CommentModel comment,
+  CommentModel comment,
 ) async {
   await _db
       .collection('stores')
@@ -134,6 +153,7 @@ Future<void> deleteStoreComment(
       .delete();
 }
 
+/// 👍 Like comment
 Future<void> toggleStoreCommentLike({
   required String storeId,
   required String commentId,
@@ -147,8 +167,9 @@ Future<void> toggleStoreCommentLike({
 
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    final data = snap.data()!;
+    if (!snap.exists) return;
 
+    final data = snap.data()!;
     final likes = List<String>.from(data['likes'] ?? []);
     final dislikes = List<String>.from(data['dislikes'] ?? []);
 
@@ -166,6 +187,7 @@ Future<void> toggleStoreCommentLike({
   });
 }
 
+/// 👎 Dislike comment
 Future<void> toggleStoreCommentDislike({
   required String storeId,
   required String commentId,
@@ -179,8 +201,9 @@ Future<void> toggleStoreCommentDislike({
 
   await _db.runTransaction((tx) async {
     final snap = await tx.get(ref);
-    final data = snap.data()!;
+    if (!snap.exists) return;
 
+    final data = snap.data()!;
     final likes = List<String>.from(data['likes'] ?? []);
     final dislikes = List<String>.from(data['dislikes'] ?? []);
 
@@ -198,20 +221,76 @@ Future<void> toggleStoreCommentDislike({
   });
 }
 
+/// Report a store comment with reason
 Future<void> reportStoreComment({
   required String storeId,
+  required String storeName,
   required String commentId,
+  required String reportedUserId,
+  required String reportedUserName,
   required String reportedBy,
+  required String reportedByName,
+  required String reason,
 }) async {
   await _db.collection('reports').add({
     'type': 'store_comment',
+
+    // Store
     'storeId': storeId,
+    'storeName': storeName,
+
+    // Comment
     'commentId': commentId,
+
+    // Comment owner
+    'reportedUserId': reportedUserId,
+    'reportedUserName': reportedUserName,
+
+    // Reporter
     'reportedBy': reportedBy,
+    'reportedByName': reportedByName,
+
+    'reason': reason,
     'createdAt': FieldValue.serverTimestamp(),
   });
 }
+/* ================= RATING ================= */
 
+/// ⭐ Rate store (average rating)
+Future<void> rateStore(String storeId, double rating) async {
+  final ref = _db.collection('stores').doc(storeId);
+
+  await _db.runTransaction((tx) async {
+    final snap = await tx.get(ref);
+    if (!snap.exists) return;
+
+    final data = snap.data()!;
+    final double currentRating = (data['rating'] ?? 0).toDouble();
+    final int count = (data['ratingCount'] ?? 0);
+
+    final newCount = count + 1;
+    final newRating =
+        ((currentRating * count) + rating) / newCount;
+
+    tx.update(ref, {
+      'rating': newRating,
+      'ratingCount': newCount,
+    });
+  });
+}
+
+/// Stream all reported store comments
+Stream<QuerySnapshot> reportedStoreCommentsStream() {
+  return _db
+      .collection('reports')
+      .where('type', isEqualTo: 'store_comment')
+      .orderBy('createdAt', descending: true)
+      .snapshots();
+}
+
+Future<void> deleteReport(String reportId) async {
+  await _db.collection('reports').doc(reportId).delete();
+}
 
 
  /// ================================

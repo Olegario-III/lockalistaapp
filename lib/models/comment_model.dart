@@ -1,54 +1,82 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CommentModel {
+  /// Core fields
   final String id;
   final String userId;
-  final String username;
-  final String userAvatar;
+  final String userName;
   final String text;
   final double rating;
+  final Timestamp createdAt;
+
+  /// UI / social fields
+  final String? userAvatar; // nullable & validated before display
   final List<String> likes;
   final List<String> dislikes;
-  final Timestamp createdAt;
 
   CommentModel({
     required this.id,
     required this.userId,
-    required this.username,
-    required this.userAvatar,
+    required this.userName,
     required this.text,
     required this.rating,
-    required this.likes,
-    required this.dislikes,
     required this.createdAt,
+    this.userAvatar,
+    this.likes = const [],
+    this.dislikes = const [],
   });
 
-  factory CommentModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-
+  /// ===============================
+  /// Firestore → Model
+  /// ===============================
+  factory CommentModel.fromMap(Map<String, dynamic> map) {
     return CommentModel(
-      id: doc.id,
-      userId: data['userId'],
-      username: data['username'],
-      userAvatar: data['userAvatar'],
-      text: data['text'],
-      rating: (data['rating'] ?? 0).toDouble(),
-      likes: List<String>.from(data['likes'] ?? []),
-      dislikes: List<String>.from(data['dislikes'] ?? []),
-      createdAt: data['createdAt'],
+      id: map['id'] ?? '',
+      userId: map['userId'] ?? '',
+      userName: map['userName'] ?? 'Unknown User',
+      text: map['text'] ?? '',
+      rating: (map['rating'] ?? 0).toDouble(),
+      createdAt: map['createdAt'] is Timestamp
+          ? map['createdAt']
+          : Timestamp.now(),
+      userAvatar: _sanitizeAvatar(map['userAvatar']),
+      likes: List<String>.from(map['likes'] ?? const []),
+      dislikes: List<String>.from(map['dislikes'] ?? const []),
     );
   }
 
+  /// ===============================
+  /// Model → Firestore
+  /// ===============================
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'userId': userId,
-      'username': username,
-      'userAvatar': userAvatar,
+      'userName': userName,
       'text': text,
       'rating': rating,
+      'createdAt': createdAt,
+      'userAvatar': userAvatar,
       'likes': likes,
       'dislikes': dislikes,
-      'createdAt': createdAt,
     };
   }
+
+  /// ===============================
+  /// Helpers
+  /// ===============================
+
+  static String? _sanitizeAvatar(dynamic value) {
+    if (value == null) return null;
+    if (value is! String) return null;
+    if (value.isEmpty) return null;
+    if (!value.startsWith('http')) return null; // prevents file:/// crash
+    return value;
+  }
+
+  bool isLikedBy(String userId) => likes.contains(userId);
+  bool isDislikedBy(String userId) => dislikes.contains(userId);
+
+  int get likeCount => likes.length;
+  int get dislikeCount => dislikes.length;
 }
