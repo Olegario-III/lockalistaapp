@@ -21,29 +21,37 @@ class _AddStorePageState extends State<AddStorePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
 
-  String selectedType = 'pharmacy';
-  String selectedBarangay = 'Bagong Ilog';
+  String selectedType = 'Resort';
+  String selectedBarangay = 'Kalawaan';
   GeoPoint? selectedLocation;
   File? selectedImage;
 
   bool _loading = false;
 
   final List<String> barangays = [
-    'Bagong Ilog',
-    'Banalo',
-    'Binangonan Proper',
+    'Batingan',
+    'Bilibiran',
+    'Ithan',
     'Calumpang',
-    'Darangan',
-    'Mabato',
+    'Kalawaan',
+    'Kalinawan',
     'Mahabang Parang',
-    'Patunhay',
-    'San Juan',
-    'Sapa',
-    'Sineguelasan',
-    'Taal',
-    'Tambong',
-    'Tuktukan',
-    'Wawa'
+    'Layunan',
+    'Libid',
+    'Libis',
+    'Limbon-limbon',
+    'Lunsad',
+    'Macamot',
+    'Mambog',
+    'Pag-asa',
+    'Palangoy',
+    'Pantok',
+    'Pila-pila',
+    'Pipindan',
+    'San Carlos',
+    'Tagpos',
+    'Tatala',
+    'Tayuman'
   ];
 
   // ────────────────

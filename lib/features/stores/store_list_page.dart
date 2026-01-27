@@ -35,17 +35,29 @@ class _StoreListPageState extends State<StoreListPage> {
   ];
 
   final List<String> barangays = [
-    'Binangonan Proper',
-    'Libid',
     'Batingan',
-    'Gulod',
+    'Bilibiran',
+    'Ithan',
+    'Calumpang',
     'Kalawaan',
+    'Kalinawan',
+    'Mahabang Parang',
+    'Layunan',
+    'Libid',
+    'Libis',
+    'Limbon-limbon',
+    'Lunsad',
+    'Macamot',
+    'Mambog',
+    'Pag-asa',
+    'Palangoy',
+    'Pantok',
+    'Pila-pila',
+    'Pipindan',
+    'San Carlos',
     'Tagpos',
     'Tatala',
-    'Pantok',
-    'Janosa',
-    'Pipindan',
-    'Kaytome',
+    'Tayuman'
   ];
 
   @override

@@ -611,6 +611,20 @@ class FirestoreService {
     await _db.collection('users').doc(id).delete();
   }
 
+  Stream<QuerySnapshot> userStoresStream(String userId) {
+  return FirebaseFirestore.instance
+      .collection('stores')
+      .where('ownerId', isEqualTo: userId)
+      .snapshots();
+}
+
+Stream<QuerySnapshot> userEventsStream(String userId) {
+  return FirebaseFirestore.instance
+      .collection('events')
+      .where('ownerId', isEqualTo: userId)
+      .snapshots();
+}
+
   // ================= REPORTS =================
 
   Stream<QuerySnapshot> reportedUsersStream() {
