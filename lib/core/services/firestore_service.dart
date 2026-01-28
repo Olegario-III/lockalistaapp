@@ -91,12 +91,18 @@ class FirestoreService {
   }
 
   /// ✅ Admin approves store
-  Future<void> approveStore(String id) async {
-    await _db.collection('stores').doc(id).update({
-      'approved': true,
-      'approvedAt': FieldValue.serverTimestamp(),
-    });
-  }
+  Future<void> approveStore({
+  required String storeId,
+  required String adminId,
+  required String adminName,
+}) async {
+  await _db.collection('stores').doc(storeId).update({
+    'status': 'approved',
+    'approvedAt': FieldValue.serverTimestamp(),
+    'approvedById': adminId,
+    'approvedByName': adminName,
+  });
+}
 
   /// ❌ Admin rejects store
   Future<void> rejectStore(String id) async {
@@ -429,18 +435,18 @@ class FirestoreService {
   /// 🛂 ADMIN ACTIONS
   /// ================================
 
-  Future<void> approveEvent(
-    String id, {
-    String? adminName,
-    String? adminId,
-  }) async {
-    await _db.collection('events').doc(id).update({
-      'status': 'approved',
-      'approvedAt': FieldValue.serverTimestamp(),
-      'approvedBy': adminId ?? '',
-      'approvedByName': adminName ?? '',
-    });
-  }
+  Future<void> approveEvent({
+  required String eventId,
+  required String adminId,
+  required String adminName,
+}) async {
+  await _db.collection('events').doc(eventId).update({
+    'status': 'approved',
+    'approvedAt': FieldValue.serverTimestamp(),
+    'approvedBy': adminId,
+    'approvedByName': adminName,
+  });
+}
 
   Future<void> rejectEvent(
     String id, {
@@ -783,8 +789,8 @@ Stream<QuerySnapshot> userEventsStream(String userId) {
       return snap.docs
           .map((d) => event.EventModel.fromMap(d.data(), d.id))
           .where((e) =>
-              (e.title?.toLowerCase().contains(q) ?? false) ||
-              (e.description?.toLowerCase().contains(q) ?? false))
+              (e.title.toLowerCase().contains(q) ?? false) ||
+              (e.description.toLowerCase().contains(q) ?? false))
           .toList();
     } catch (e) {
       debugPrint('searchEvents error: $e');

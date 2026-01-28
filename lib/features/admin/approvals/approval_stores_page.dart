@@ -1,14 +1,53 @@
-// lib/features/admin/approvals/approval_stores_page.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../../core/services/firestore_service.dart';
 import '../../../models/store_model.dart';
 
-class ApprovalStoresPage extends StatelessWidget {
+class ApprovalStoresPage extends StatefulWidget {
   const ApprovalStoresPage({super.key});
 
   @override
+  State<ApprovalStoresPage> createState() => _ApprovalStoresPageState();
+}
+
+class _ApprovalStoresPageState extends State<ApprovalStoresPage> {
+  final firestore = FirestoreService.instance;
+  final currentUser = FirebaseAuth.instance.currentUser;
+
+  String? adminName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminName();
+  }
+
+  /// Load the current admin's name from Firestore
+  Future<void> _loadAdminName() async {
+    if (currentUser == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser!.uid)
+        .get();
+
+    if (!mounted) return;
+
+    setState(() {
+      adminName = doc.data()?['name'] ?? 'Admin';
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final firestore = FirestoreService.instance;
+    // Show loading until admin info is available
+    if (currentUser == null || adminName == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Approve Stores')),
@@ -58,7 +97,7 @@ class ApprovalStoresPage extends StatelessWidget {
                             width: 64,
                             height: 64,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
+                            errorBuilder: (_, __, ___) =>
                                 const Icon(Icons.store, size: 64),
                           )
                         : const Icon(Icons.store, size: 64),
@@ -84,7 +123,7 @@ class ApprovalStoresPage extends StatelessWidget {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Reject
+                      /// ❌ Reject
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.red),
                         tooltip: 'Reject Store',
@@ -93,12 +132,16 @@ class ApprovalStoresPage extends StatelessWidget {
                         },
                       ),
 
-                      // Approve
+                      /// ✅ Approve
                       IconButton(
                         icon: const Icon(Icons.check, color: Colors.green),
                         tooltip: 'Approve Store',
-                        onPressed: () {
-                          firestore.approveStore(store.id);
+                        onPressed: () async {
+                          await firestore.approveStore(
+                            storeId: store.id,
+                            adminId: currentUser!.uid,
+                            adminName: adminName!,
+                          );
                         },
                       ),
                     ],

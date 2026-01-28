@@ -52,7 +52,7 @@ class ProfileEventsList extends StatelessWidget {
                   },
                 ),
               );
-            }).toList(),
+            }),
           ],
         );
       },

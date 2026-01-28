@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'comment_model.dart'; // ✅ USE THE SINGLE SOURCE OF TRUTH
+import 'comment_model.dart'; // ✅ Use the single source of truth
 
 class StoreModel {
   final String id;
@@ -11,6 +11,11 @@ class StoreModel {
   final String ownerId;
   final bool approved;
   final List<String> reportedBy;
+
+  /// Approval info
+  final String? approvedById;    // Admin UID
+  final String? approvedByName;  // Admin Name
+  final Timestamp? approvedAt;    // When it was approved
 
   /// Rating system
   final double rating;       // total rating score
@@ -34,6 +39,9 @@ class StoreModel {
     required this.ownerId,
     this.approved = false,
     this.reportedBy = const [],
+    this.approvedById,
+    this.approvedByName,
+    this.approvedAt,
     this.rating = 0.0,
     this.ratingCount = 0,
     this.comments = const [],
@@ -46,8 +54,7 @@ class StoreModel {
       ratingCount == 0 ? 0.0 : rating / ratingCount;
 
   /// 🖼️ Main image used by UI (prevents imageUrl error)
-  String get imageUrl =>
-      images.isNotEmpty ? images.first : '';
+  String get imageUrl => images.isNotEmpty ? images.first : '';
 
   /// 🔹 Firestore → Model
   factory StoreModel.fromMap(Map<String, dynamic> map, String id) {
@@ -61,6 +68,9 @@ class StoreModel {
       ownerId: map['ownerId'] ?? '',
       approved: map['approved'] ?? false,
       reportedBy: List<String>.from(map['reportedBy'] ?? []),
+      approvedById: map['approvedById'],
+      approvedByName: map['approvedByName'],
+      approvedAt: map['approvedAt'],
       rating: (map['rating'] ?? 0).toDouble(),
       ratingCount: map['ratingCount'] ?? 0,
       images: List<String>.from(map['images'] ?? []),
@@ -82,6 +92,9 @@ class StoreModel {
       'ownerId': ownerId,
       'approved': approved,
       'reportedBy': reportedBy,
+      'approvedById': approvedById,
+      'approvedByName': approvedByName,
+      'approvedAt': approvedAt,
       'rating': rating,
       'ratingCount': ratingCount,
       'images': images,

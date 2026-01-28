@@ -50,7 +50,7 @@ class ProfileStoresList extends StatelessWidget {
                   },
                 ),
               );
-            }).toList(),
+            }),
           ],
         );
       },

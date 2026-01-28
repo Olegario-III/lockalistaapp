@@ -14,7 +14,10 @@ class _RegisterPageState extends State<RegisterPage> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _pass = TextEditingController();
+  final _confirmPass = TextEditingController();
   bool _loading = false;
+  bool _obscurePass = true;
+  bool _obscureConfirmPass = true;
 
   Future<void> _register() async {
     if (_name.text.trim().isEmpty) {
@@ -24,10 +27,16 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
+    if (_pass.text != _confirmPass.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
 
     try {
-      // Register the user (role handled inside AuthService)
       await _auth.register(
         _email.text.trim(),
         _pass.text.trim(),
@@ -74,8 +83,38 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 12),
             TextField(
               controller: _pass,
-              obscureText: true,
-              decoration: const InputDecoration(hintText: 'Password'),
+              obscureText: _obscurePass,
+              decoration: InputDecoration(
+                hintText: 'Password',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePass ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePass = !_obscurePass;
+                    });
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _confirmPass,
+              obscureText: _obscureConfirmPass,
+              decoration: InputDecoration(
+                hintText: 'Confirm Password',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirmPass ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirmPass = !_obscureConfirmPass;
+                    });
+                  },
+                ),
+              ),
             ),
             const SizedBox(height: 18),
             _loading

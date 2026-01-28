@@ -1,4 +1,3 @@
-// lib/features/stores/store_list_page.dart
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -57,7 +56,7 @@ class _StoreListPageState extends State<StoreListPage> {
     'San Carlos',
     'Tagpos',
     'Tatala',
-    'Tayuman'
+    'Tayuman',
   ];
 
   @override
@@ -67,23 +66,23 @@ class _StoreListPageState extends State<StoreListPage> {
     _checkAdmin();
   }
 
-  // 🔐 Check admin role from Firestore
+  /// 🔐 Correct admin check (users.role)
   Future<void> _checkAdmin() async {
     if (currentUserId == null) return;
 
     final doc = await FirebaseFirestore.instance
-        .collection('admins')
+        .collection('users')
         .doc(currentUserId)
         .get();
 
-    if (mounted) {
-      setState(() {
-        isAdmin = doc.exists;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      isAdmin = doc.data()?['role'] == 'admin';
+    });
   }
 
-  // 📍 Get user location
+  /// 📍 Get user location
   Future<void> _getUserLocation() async {
     final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied ||
@@ -92,10 +91,10 @@ class _StoreListPageState extends State<StoreListPage> {
     }
 
     userPosition = await Geolocator.getCurrentPosition();
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
-  // 📏 Distance calculation
+  /// 📏 Distance calculation
   double _distanceToUser(sm.StoreModel store) {
     if (userPosition == null) return double.infinity;
 
@@ -109,6 +108,8 @@ class _StoreListPageState extends State<StoreListPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Stores')),
       body: Column(
@@ -124,11 +125,10 @@ class _StoreListPageState extends State<StoreListPage> {
 
                 var stores = snapshot.data!;
 
-                // 🔍 Apply filters
+                /// 🔍 Filters
                 if (selectedType != null) {
-                  stores = stores
-                      .where((s) => s.type == selectedType)
-                      .toList();
+                  stores =
+                      stores.where((s) => s.type == selectedType).toList();
                 }
 
                 if (selectedBarangay != null) {
@@ -137,7 +137,7 @@ class _StoreListPageState extends State<StoreListPage> {
                       .toList();
                 }
 
-                // 📍 Sort by distance
+                /// 📍 Sort by distance
                 stores.sort(
                   (a, b) =>
                       _distanceToUser(a).compareTo(_distanceToUser(b)),
@@ -149,27 +149,49 @@ class _StoreListPageState extends State<StoreListPage> {
 
                 return ListView.separated(
                   itemCount: stores.length,
-                  separatorBuilder: (_, _) =>
-                      const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final s = stores[index];
-
                     final canDelete =
                         isAdmin || currentUserId == s.ownerId;
 
                     return ListTile(
-                      leading: s.imageUrl.isNotEmpty
-                          ? Image.network(
-                              s.imageUrl,
-                              width: 64,
-                              height: 64,
-                              fit: BoxFit.cover,
-                            )
-                          : const Icon(Icons.store),
-                      title: Text(s.name),
-                      subtitle: Text(
-                        '${s.averageRating.toStringAsFixed(1)} ★ • '
-                        '${(_distanceToUser(s) / 1000).toStringAsFixed(2)} km',
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: s.imageUrl.isNotEmpty
+                            ? Image.network(
+                                s.imageUrl,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                              )
+                            : const Icon(Icons.store, size: 40),
+                      ),
+                      title: Text(
+                        s.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 2),
+
+                          /// ⭐ rating + distance
+                          Text(
+                            '${s.averageRating.toStringAsFixed(1)} ★ • '
+                            '${(_distanceToUser(s) / 1000).toStringAsFixed(2)} km',
+                          ),
+
+                          /// 👤 approved by
+                          if (s.approvedByName != null)
+                            Text(
+                              'Approved by ${s.approvedByName}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface
+                                    .withOpacity(0.6),
+                              ),
+                            ),
+                        ],
                       ),
                       trailing: canDelete
                           ? IconButton(
@@ -230,7 +252,7 @@ class _StoreListPageState extends State<StoreListPage> {
     );
   }
 
-  // 🔘 Filters UI
+  /// 🔘 Filters UI
   Widget _buildFilters() {
     return Padding(
       padding: const EdgeInsets.all(8),

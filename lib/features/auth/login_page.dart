@@ -17,6 +17,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _passCtrl = TextEditingController();
   bool _loading = false;
+  bool _obscurePass = true; // <-- password visibility toggle
 
   // ─────────────────────────────────────────────
   // EMAIL/PASSWORD LOGIN
@@ -63,9 +64,7 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -91,8 +90,7 @@ class _LoginPageState extends State<LoginPage> {
         idToken: googleAuth.idToken,
       );
 
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      await FirebaseAuth.instance.signInWithCredential(credential);
 
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -101,9 +99,7 @@ class _LoginPageState extends State<LoginPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google login failed: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Google login failed: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -120,11 +116,24 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // ─────────────────────────────────────────────
-                // APP LOGO
+                // APP LOGO + TAGLINE
                 // ─────────────────────────────────────────────
-                Image.asset(
-                  'assets/Lockalista_logo02.jpg',
-                  height: 120,
+                Column(
+                  children: [
+                    Image.asset(
+                      'assets/Lockalista_logo02.jpg',
+                      height: 120,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'DISCOVERING LOCAL EVENTS IN THE MUNICIPALITY OF BINANGONAN, RIZAL',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.onBackground,
+                          ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 32),
 
@@ -142,10 +151,20 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passCtrl,
-                  obscureText: true,
-                  decoration: const InputDecoration(
+                  obscureText: _obscurePass,
+                  decoration: InputDecoration(
                     hintText: "Password",
-                    border: OutlineInputBorder(),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePass ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePass = !_obscurePass;
+                        });
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),

@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/services/firestore_service.dart';
 import '../../models/event_model.dart' as em;
 import '../events/event_detail_page.dart';
-import '../profile/profile_page.dart';
+import 'event_card.dart';
 
 class EventListPage extends StatefulWidget {
   const EventListPage({super.key});
@@ -42,13 +42,9 @@ class _EventListPageState extends State<EventListPage> {
     });
   }
 
-  /// 🔁 Fallback ONLY for old events
   Future<Map<String, String?>> _loadOwnerProfile(em.EventModel e) async {
     if (e.ownerName.isNotEmpty) {
-      return {
-        'name': e.ownerName,
-        'avatar': e.ownerAvatar,
-      };
+      return {'name': e.ownerName, 'avatar': e.ownerAvatar};
     }
 
     final doc = await FirebaseFirestore.instance
@@ -64,16 +60,9 @@ class _EventListPageState extends State<EventListPage> {
     };
   }
 
-  /// 🚩 Report event owner
   Future<void> _reportEventOwner(em.EventModel event) async {
     if (currentUser == null) return;
-
-    if (currentUser!.uid == event.ownerId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You can't report yourself")),
-      );
-      return;
-    }
+    if (currentUser!.uid == event.ownerId) return;
 
     final reasons = [
       'Spam',
@@ -83,68 +72,36 @@ class _EventListPageState extends State<EventListPage> {
       'Fake event',
     ];
 
-    final String? selectedReason = await showDialog<String>(
+    final reason = await showDialog<String>(
       context: context,
       builder: (context) {
-        String? tempReason;
-
-        return StatefulBuilder(
-          builder: (context, setStateSB) {
-            return AlertDialog(
-              title: const Text('Report Event Owner'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: reasons.map((reason) {
-                  return RadioListTile<String>(
-                    title: Text(reason),
-                    value: reason,
-                    groupValue: tempReason,
-                    onChanged: (value) {
-                      setStateSB(() => tempReason = value);
-                    },
-                  );
-                }).toList(),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: tempReason == null
-                      ? null
-                      : () => Navigator.pop(context, tempReason),
-                  child: const Text('Report'),
-                ),
-              ],
-            );
-          },
+        String? selected;
+        return AlertDialog(
+          title: const Text('Report Event Owner'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: reasons
+                .map((r) => RadioListTile<String>(
+                      title: Text(r),
+                      value: r,
+                      groupValue: selected,
+                      onChanged: (v) =>
+                          (context as Element).markNeedsBuild(),
+                    ))
+                .toList(),
+          ),
         );
       },
     );
 
-    if (selectedReason == null) return;
+    if (reason == null) return;
 
-    try {
-      await _service.reportUser(
-        reportedUserId: event.ownerId,
-        reportedBy: currentUser!.uid,
-        eventId: event.id,
-        reason: selectedReason,
-      );
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User reported successfully')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    }
+    await _service.reportUser(
+      reportedUserId: event.ownerId,
+      reportedBy: currentUser!.uid,
+      eventId: event.id,
+      reason: reason,
+    );
   }
 
   @override
@@ -159,170 +116,44 @@ class _EventListPageState extends State<EventListPage> {
           }
 
           final events = snapshot.data ?? [];
-
           if (events.isEmpty) {
             return const Center(child: Text('No events yet.'));
           }
 
           return ListView.separated(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(12),
             itemCount: events.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final e = events[index];
-              final canDelete = isAdmin || e.ownerId == currentUser?.uid;
               final liked = e.likesList.contains(currentUser?.uid);
+              final canDelete = isAdmin || e.ownerId == currentUser?.uid;
 
               return FutureBuilder<Map<String, String?>>(
                 future: _loadOwnerProfile(e),
-                builder: (context, userSnap) {
-                  final posterName = userSnap.data?['name'] ?? 'Unknown';
-                  final posterAvatar = userSnap.data?['avatar'];
-
-                  return Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 3,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ListTile(
-                          leading: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ProfilePage(userId: e.ownerId),
-                                ),
-                              );
-                            },
-                            child: CircleAvatar(
-                              backgroundImage: posterAvatar != null
-                                  ? NetworkImage(posterAvatar)
-                                  : null,
-                              child: posterAvatar == null
-                                  ? const Icon(Icons.person)
-                                  : null,
-                            ),
-                          ),
-                          title: Text(
-                            posterName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(_formatDate(e.startDate)),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) async {
-                              if (value == 'report') {
-                                await _reportEventOwner(e);
-                              } else if (value == 'delete') {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title: const Text('Delete Event'),
-                                    content: const Text(
-                                        'Are you sure you want to delete this event?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, false),
-                                        child: const Text('Cancel'),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () =>
-                                            Navigator.pop(context, true),
-                                        child: const Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (confirm == true) {
-                                  await _service.deleteEvent(e.id);
-                                }
-                              }
-                            },
-                            itemBuilder: (_) => [
-                              if (!canDelete)
-                                const PopupMenuItem(
-                                  value: 'report',
-                                  child: Text('🚩 Report User'),
-                                ),
-                              if (canDelete)
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('🗑 Delete Event'),
-                                ),
-                            ],
-                          ),
+                builder: (context, snap) {
+                  return EventCard(
+                    event: e,
+                    posterName: snap.data?['name'] ?? 'Unknown',
+                    posterAvatar: snap.data?['avatar'],
+                    liked: liked,
+                    canDelete: canDelete,
+                    onLike: () {
+                      if (currentUser == null) return;
+                      _service.likeEvent(e.id, currentUser!.uid);
+                    },
+                    onView: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EventDetailPage(event: e),
                         ),
-
-                        if (e.imageUrl?.isNotEmpty == true)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              e.imageUrl!,
-                              height: 200,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                e.title,
-                                style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(e.description),
-                            ],
-                          ),
-                        ),
-
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                icon: Icon(
-                                  liked
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
-                                  color: Colors.red,
-                                ),
-                                onPressed: () async {
-                                  if (currentUser == null) return;
-                                  await _service.likeEvent(
-                                      e.id, currentUser!.uid);
-                                },
-                              ),
-                              Text('${e.likesCount}'),
-                              const Spacer(),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          EventDetailPage(event: e),
-                                    ),
-                                  );
-                                },
-                                child: const Text('View'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
+                    onDelete: () async {
+                      await _service.deleteEvent(e.id);
+                    },
+                    onReport: () => _reportEventOwner(e),
                   );
                 },
               );
@@ -331,9 +162,5 @@ class _EventListPageState extends State<EventListPage> {
         },
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }
