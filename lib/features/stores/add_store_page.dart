@@ -21,14 +21,25 @@ class _AddStorePageState extends State<AddStorePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
 
-  String selectedType = 'Resort';
-  String selectedBarangay = 'Kalawaan';
+  /// ✅ SAFE DEFAULT
+  String selectedType = 'resort';
+  String? selectedBarangay;
+
   GeoPoint? selectedLocation;
   File? selectedImage;
 
   bool _loading = false;
 
-  final List<String> barangays = [
+  final List<String> storeTypes = const [
+    'pharmacy',
+    'resort',
+    'grocery',
+    'sari-sari store',
+    'karenderya',
+    'others',
+  ];
+
+  final List<String> barangays = const [
     'Batingan',
     'Bilibiran',
     'Ithan',
@@ -51,11 +62,11 @@ class _AddStorePageState extends State<AddStorePage> {
     'San Carlos',
     'Tagpos',
     'Tatala',
-    'Tayuman'
+    'Tayuman',
   ];
 
   // ────────────────
-  // Pick location
+  // 📍 Pick location
   // ────────────────
   Future<void> _pickLocation() async {
     final location = await Helpers.pickLocationOnMap(context);
@@ -66,22 +77,28 @@ class _AddStorePageState extends State<AddStorePage> {
   }
 
   // ────────────────
-  // Pick image
+  // 🖼 Pick image
   // ────────────────
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final picked =
         await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+
     if (picked != null) {
       setState(() => selectedImage = File(picked.path));
     }
   }
 
   // ────────────────
-  // Submit store
+  // 🚀 Submit store
   // ────────────────
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (selectedBarangay == null) {
+      Helpers.showSnackBar(context, 'Please select a barangay');
+      return;
+    }
 
     if (selectedLocation == null) {
       Helpers.showSnackBar(context, 'Please pick a location');
@@ -96,36 +113,34 @@ class _AddStorePageState extends State<AddStorePage> {
     setState(() => _loading = true);
 
     try {
-      // Upload image to Cloudinary
-      final uploadedImageUrl = await CloudinaryService().uploadFile(
+      final imageUrl = await CloudinaryService().uploadFile(
         selectedImage!,
         folder: 'stores',
       );
 
-      if (uploadedImageUrl == null) {
-        Helpers.showSnackBar(context, 'Failed to upload store image');
-        setState(() => _loading = false);
+      if (imageUrl == null) {
+        Helpers.showSnackBar(context, 'Image upload failed');
         return;
       }
 
-      // Create store
       final store = StoreModel(
-        id: '', // Firestore will generate this
+        id: '',
         name: _nameController.text.trim(),
         type: selectedType,
-        barangay: selectedBarangay,
+        barangay: selectedBarangay!,
         location: selectedLocation!,
         ownerId: Helpers.currentUserId(),
-        images: [uploadedImageUrl], // store image URL in the list
+        images: [imageUrl],
       );
 
-      // Add store
       await FirestoreService.instance.addStore(store);
 
       if (!mounted) return;
 
       Helpers.showSnackBar(
-          context, 'Store added! Waiting for admin approval.');
+        context,
+        'Store added! Waiting for admin approval.',
+      );
       Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -168,59 +183,62 @@ class _AddStorePageState extends State<AddStorePage> {
 
                       // Store Type
                       DropdownButtonFormField<String>(
-                        initialValue: selectedType,
+                        value: selectedType,
                         decoration:
                             const InputDecoration(labelText: 'Store Type'),
-                        items: const [
-                          'pharmacy',
-                          'resort',
-                          'grocery',
-                          'sari-sari store',
-                          'karenderya',
-                          'others'
-                        ]
-                            .map((type) =>
-                                DropdownMenuItem(value: type, child: Text(type)))
+                        items: storeTypes
+                            .map((t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(t),
+                                ))
                             .toList(),
-                        onChanged: (v) => setState(() => selectedType = v!),
+                        onChanged: (v) =>
+                            setState(() => selectedType = v!),
                       ),
                       const SizedBox(height: 16),
 
-                      // Barangay
+                      // Barangay (NO initialValue = NO crash)
                       DropdownButtonFormField<String>(
-                        initialValue: selectedBarangay,
+                        hint: const Text('Select Barangay'),
                         decoration:
                             const InputDecoration(labelText: 'Barangay'),
                         items: barangays
-                            .map((b) =>
-                                DropdownMenuItem(value: b, child: Text(b)))
+                            .map((b) => DropdownMenuItem(
+                                  value: b,
+                                  child: Text(b),
+                                ))
                             .toList(),
-                        onChanged: (v) => setState(() => selectedBarangay = v!),
+                        onChanged: (v) =>
+                            setState(() => selectedBarangay = v),
                       ),
                       const SizedBox(height: 16),
 
-                      // Pick Location
                       ElevatedButton.icon(
                         onPressed: _pickLocation,
                         icon: const Icon(Icons.map),
-                        label: Text(selectedLocation == null
-                            ? 'Pick Store Location'
-                            : 'Location Selected'),
+                        label: Text(
+                          selectedLocation == null
+                              ? 'Pick Store Location'
+                              : 'Location Selected',
+                        ),
                       ),
                       const SizedBox(height: 16),
 
-                      // Pick Image
                       ElevatedButton.icon(
                         onPressed: _pickImage,
                         icon: const Icon(Icons.image),
-                        label: Text(selectedImage == null
-                            ? 'Pick Store Image'
-                            : 'Image Selected'),
+                        label: Text(
+                          selectedImage == null
+                              ? 'Pick Store Image'
+                              : 'Image Selected',
+                        ),
                       ),
                       const SizedBox(height: 32),
 
                       ElevatedButton(
-                          onPressed: _submit, child: const Text('Add Store')),
+                        onPressed: _submit,
+                        child: const Text('Add Store'),
+                      ),
                     ],
                   ),
                 ),

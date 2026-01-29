@@ -90,27 +90,26 @@ class FirestoreService {
     await _db.collection('stores').doc(id).delete();
   }
 
-  /// ✅ Admin approves store
+   /// ✅ APPROVE STORE (THIS MAKES APPROVE BUTTON WORK)
   Future<void> approveStore({
-  required String storeId,
-  required String adminId,
-  required String adminName,
-}) async {
-  await _db.collection('stores').doc(storeId).update({
-    'status': 'approved',
-    'approvedAt': FieldValue.serverTimestamp(),
-    'approvedById': adminId,
-    'approvedByName': adminName,
-  });
-}
-
-  /// ❌ Admin rejects store
-  Future<void> rejectStore(String id) async {
-    await _db.collection('stores').doc(id).update({
-      'approved': false,
-      'rejectedAt': FieldValue.serverTimestamp(),
+    required String storeId,
+    required String adminId,
+    required String adminName,
+  }) async {
+    await _db.collection('stores').doc(storeId).update({
+      'approved': true,
+      'approvedById': adminId,
+      'approvedByName': adminName,
+      'approvedAt': FieldValue.serverTimestamp(),
     });
   }
+
+  /// ❌ DELETE / REJECT STORE (THIS MAKES DELETE BUTTON WORK)
+  Future<void> rejectStore(String storeId) async {
+    await _db.collection('stores').doc(storeId).delete();
+  }
+
+  
 
   /// 🚨 Report store
   Future<void> reportStore(String storeId, String reportedBy) async {

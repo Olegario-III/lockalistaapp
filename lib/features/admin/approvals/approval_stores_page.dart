@@ -24,7 +24,6 @@ class _ApprovalStoresPageState extends State<ApprovalStoresPage> {
     _loadAdminName();
   }
 
-  /// Load the current admin's name from Firestore
   Future<void> _loadAdminName() async {
     if (currentUser == null) return;
 
@@ -42,7 +41,6 @@ class _ApprovalStoresPageState extends State<ApprovalStoresPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading until admin info is available
     if (currentUser == null || adminName == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -59,9 +57,7 @@ class _ApprovalStoresPageState extends State<ApprovalStoresPage> {
           }
 
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
 
           final stores = snapshot.data ?? [];
@@ -79,70 +75,106 @@ class _ApprovalStoresPageState extends State<ApprovalStoresPage> {
               final store = stores[index];
 
               return Card(
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                elevation: 2,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(8),
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: store.images.isNotEmpty
-                        ? Image.network(
-                            store.images.first,
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.store, size: 64),
-                          )
-                        : const Icon(Icons.store, size: 64),
-                  ),
-                  title: Text(
-                    store.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  subtitle: Column(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 4),
-                      Text('Type: ${store.type}'),
-                      Text('Barangay: ${store.barangay}'),
-                      if (store.address != null)
-                        Text('Address: ${store.address}'),
-                    ],
-                  ),
-                  isThreeLine: store.address != null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      /// ❌ Reject
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        tooltip: 'Reject Store',
-                        onPressed: () {
-                          firestore.rejectStore(store.id);
-                        },
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: store.images.isNotEmpty
+                              ? Image.network(
+                                  store.images.first,
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const Icon(Icons.store, size: 64),
+                                )
+                              : const Icon(Icons.store, size: 64),
+                        ),
+                        title: Text(
+                          store.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text('Type: ${store.type}'),
+                            Text('Barangay: ${store.barangay}'),
+                            if (store.address != null)
+                              Text('Address: ${store.address}'),
+                          ],
+                        ),
                       ),
 
-                      /// ✅ Approve
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green),
-                        tooltip: 'Approve Store',
-                        onPressed: () async {
-                          await firestore.approveStore(
-                            storeId: store.id,
-                            adminId: currentUser!.uid,
-                            adminName: adminName!,
-                          );
-                        },
+                      const SizedBox(height: 12),
+
+                      /// 🔘 ACTION BUTTONS
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          /// 🗑 DELETE (Reject)
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            label: const Text(
+                              'Delete',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: const Text('Delete Store'),
+                                  content: const Text(
+                                    'Are you sure you want to delete this store?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (confirm == true) {
+                                await firestore.rejectStore(store.id);
+                              }
+                            },
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          /// ✅ APPROVE
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.check),
+                            label: const Text('Approve'),
+                            onPressed: () async {
+                              await firestore.approveStore(
+                                storeId: store.id,
+                                adminId: currentUser!.uid,
+                                adminName: adminName!,
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
