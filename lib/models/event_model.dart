@@ -1,3 +1,4 @@
+// lib/models/event_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// =======================
@@ -30,7 +31,9 @@ class CommentModel {
       content: map['content'] ?? '',
       timestamp: map['timestamp'] is Timestamp
           ? (map['timestamp'] as Timestamp).toDate()
-          : DateTime.now(),
+          : map['timestamp'] is String
+              ? DateTime.tryParse(map['timestamp']) ?? DateTime.now()
+              : DateTime.now(),
       likes: List<String>.from(map['likes'] ?? const []),
       dislikes: List<String>.from(map['dislikes'] ?? const []),
     );
@@ -107,6 +110,12 @@ class EventModel {
 
   /// 🔄 Firestore → Model
   factory EventModel.fromMap(Map<String, dynamic> map, String id) {
+    DateTime parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+      return DateTime.now();
+    }
+
     return EventModel(
       id: id,
       title: map['title'] ?? '',
@@ -115,22 +124,12 @@ class EventModel {
       // supports legacy + current field names
       ownerId: map['ownerId'] ?? map['userId'] ?? '',
       ownerName: map['ownerName'] ?? 'Unknown',
-      ownerAvatar:
-          map['ownerAvatar'] ?? map['ownerAvatarUrl'],
-
+      ownerAvatar: map['ownerAvatar'] ?? map['ownerAvatarUrl'],
       imageUrl: map['imageUrl'],
 
-      createdAt: map['createdAt'] is Timestamp
-          ? (map['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-
-      startDate: map['startDate'] is Timestamp
-          ? (map['startDate'] as Timestamp).toDate()
-          : DateTime.now(),
-
-      endDate: map['endDate'] is Timestamp
-          ? (map['endDate'] as Timestamp).toDate()
-          : DateTime.now(),
+      createdAt: parseDate(map['createdAt']),
+      startDate: parseDate(map['startDate']),
+      endDate: parseDate(map['endDate']),
 
       status: map['status'] ?? 'pending',
       approvedBy: map['approvedBy'],
@@ -140,11 +139,7 @@ class EventModel {
       likesCount: map['likesCount'] ?? 0,
 
       comments: (map['comments'] as List<dynamic>? ?? const [])
-          .map(
-            (c) => CommentModel.fromMap(
-              Map<String, dynamic>.from(c),
-            ),
-          )
+          .map((c) => CommentModel.fromMap(Map<String, dynamic>.from(c)))
           .toList(),
     );
   }

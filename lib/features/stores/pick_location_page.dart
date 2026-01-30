@@ -16,9 +16,9 @@ class _PickLocationPageState extends State<PickLocationPage> {
 
   // Binangonan bounds
   final LatLngBounds binangonanBounds = LatLngBounds(
-    LatLng(14.4546, 121.1808), // southwest
-    LatLng(14.6131, 121.2267), // northeast
-  );
+  LatLng(14.4300, 121.1500), // southwest (expanded)
+  LatLng(14.6500, 121.2600), // northeast (expanded)
+);
 
   bool _isInsideBounds(LatLng pos) {
     return pos.latitude >= binangonanBounds.south &&

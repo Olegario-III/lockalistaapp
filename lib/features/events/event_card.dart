@@ -13,6 +13,9 @@ class EventCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onReport;
 
+  /// Optional: inject custom time text (e.g., "7 days ago" or "3 days left")
+  final String? timeText;
+
   const EventCard({
     super.key,
     required this.event,
@@ -24,18 +27,40 @@ class EventCard extends StatelessWidget {
     required this.onView,
     required this.onDelete,
     required this.onReport,
+    this.timeText,
   });
 
+  /// 🔹 Default time for upcoming events
   String _timeUntilEvent() {
-    final diff = event.startDate.difference(DateTime.now());
-    if (diff.isNegative) return 'Started';
+    final now = DateTime.now();
+    final diff = event.startDate.difference(now);
+
     if (diff.inDays > 0) return '${diff.inDays} days left';
     if (diff.inHours > 0) return '${diff.inHours} hrs left';
-    return '${diff.inMinutes} mins left';
+    if (diff.inMinutes > 0) return '${diff.inMinutes} mins left';
+    return 'Starting soon';
+  }
+
+  /// 🔹 Helper for past events
+  String _timeSinceEvent() {
+    final now = DateTime.now();
+    final diff = now.difference(event.startDate);
+
+    if (diff.inDays > 0) return '${diff.inDays} days ago';
+    if (diff.inHours > 0) return '${diff.inHours} hrs ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes} mins ago';
+    return 'Just now';
   }
 
   @override
   Widget build(BuildContext context) {
+    // Use injected timeText first (from PastEventListPage)
+    // Fallback: if startDate is in the past -> show "X days ago"
+    // Otherwise -> show "X days left"
+    final now = DateTime.now();
+    final displayTime = timeText ??
+        (event.startDate.isBefore(now) ? _timeSinceEvent() : _timeUntilEvent());
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -51,8 +76,7 @@ class EventCard extends StatelessWidget {
                   radius: 22,
                   backgroundImage:
                       posterAvatar != null ? NetworkImage(posterAvatar!) : null,
-                  child:
-                      posterAvatar == null ? const Icon(Icons.person) : null,
+                  child: posterAvatar == null ? const Icon(Icons.person) : null,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -63,8 +87,7 @@ class EventCard extends StatelessWidget {
                   ),
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (v) =>
-                      v == 'delete' ? onDelete() : onReport(),
+                  onSelected: (v) => v == 'delete' ? onDelete() : onReport(),
                   itemBuilder: (_) => [
                     if (!canDelete)
                       const PopupMenuItem(
@@ -81,7 +104,7 @@ class EventCard extends StatelessWidget {
               ],
             ),
 
-            /// ✅ FIXED: BELOW header, HORIZONTAL, NO OVERLAP
+            /// ✅ BELOW header, HORIZONTAL, NO OVERLAP
             const SizedBox(height: 8),
             Wrap(
               spacing: 12,
@@ -89,7 +112,7 @@ class EventCard extends StatelessWidget {
               children: [
                 _Chip(
                   icon: Icons.timer,
-                  text: _timeUntilEvent(),
+                  text: displayTime, // ⚡ Use injected or default
                 ),
                 if (event.approvedByName != null)
                   _Chip(
@@ -115,8 +138,8 @@ class EventCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               event.title,
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(event.description),
