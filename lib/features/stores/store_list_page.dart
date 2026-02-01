@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
 import '../../core/services/firestore_service.dart';
 import '../../models/store_model.dart' as sm;
 import 'store_detail_page.dart';
+import 'store_card.dart';
+import 'store_filters.dart';
 
 class StoreListPage extends StatefulWidget {
   const StoreListPage({super.key});
@@ -16,16 +19,24 @@ class StoreListPage extends StatefulWidget {
 
 class _StoreListPageState extends State<StoreListPage> {
   final FirestoreService _service = FirestoreService.instance;
-
   final String? currentUserId = FirebaseAuth.instance.currentUser?.uid;
   bool isAdmin = false;
 
+  /// filters
   String? selectedType;
   String? selectedBarangay;
   String searchQuery = '';
 
+  /// location
   Position? userPosition;
 
+  /// store data
+  final List<sm.StoreModel> _stores = [];
+  bool _isLoading = true;
+
+  final ScrollController _scrollController = ScrollController();
+
+  /// constants
   final List<String> storeTypes = [
     'pharmacy',
     'resort',
@@ -45,38 +56,30 @@ class _StoreListPageState extends State<StoreListPage> {
   };
 
   final List<String> barangays = [
-    'Batingan',
-    'Bilibiran',
-    'Ithan',
-    'Calumpang',
-    'Kalawaan',
-    'Kalinawan',
-    'Mahabang Parang',
-    'Layunan',
-    'Libid',
-    'Libis',
-    'Limbon-limbon',
-    'Lunsad',
-    'Macamot',
-    'Mambog',
-    'Pag-asa',
-    'Palangoy',
-    'Pantok',
-    'Pila-pila',
-    'Pipindan',
-    'San Carlos',
-    'Tagpos',
-    'Tatala',
-    'Tayuman',
+    'Batingan','Bilibiran','Ithan','Calumpang','Kalawaan','Kalinawan','Mahabang Parang',
+    'Layunan','Libid','Libis','Limbon-limbon','Lunsad','Macamot','Mambog','Pag-asa',
+    'Palangoy','Pantok','Pila-pila','Pipindan','San Carlos','Tagpos','Tatala','Tayuman',
   ];
+
+  /// Firestore listener
+  StreamSubscription<QuerySnapshot>? _storeSubscription;
 
   @override
   void initState() {
     super.initState();
-    _getUserLocation();
     _checkAdmin();
+    _getUserLocation();
+    _listenToStores();
   }
 
+  @override
+  void dispose() {
+    _storeSubscription?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// ---------------- ADMIN ----------------
   Future<void> _checkAdmin() async {
     if (currentUserId == null) return;
 
@@ -92,20 +95,25 @@ class _StoreListPageState extends State<StoreListPage> {
     });
   }
 
+  /// ---------------- LOCATION ----------------
   Future<void> _getUserLocation() async {
     final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return;
-    }
+        permission == LocationPermission.deniedForever) return;
 
     userPosition = await Geolocator.getCurrentPosition();
-    if (mounted) setState(() {});
+    if (!mounted) return;
+
+    // Re-sort stores by distance if we already have them
+    if (_stores.isNotEmpty) {
+      setState(() {
+        _stores.sort((a, b) => _distanceToUser(a).compareTo(_distanceToUser(b)));
+      });
+    }
   }
 
   double _distanceToUser(sm.StoreModel store) {
     if (userPosition == null) return double.infinity;
-
     return Geolocator.distanceBetween(
       userPosition!.latitude,
       userPosition!.longitude,
@@ -114,227 +122,133 @@ class _StoreListPageState extends State<StoreListPage> {
     );
   }
 
+  /// ---------------- FIRESTORE REAL-TIME ----------------
+  void _listenToStores() {
+    _storeSubscription = FirebaseFirestore.instance
+        .collection('stores')
+        .where('approved', isEqualTo: true)
+        .snapshots()
+        .listen((snap) {
+      _stores.clear();
+      _stores.addAll(
+        snap.docs.map(
+          (d) => sm.StoreModel.fromMap(d.data(), d.id),
+        ),
+      );
+
+      // sort by distance if location known
+      if (userPosition != null) {
+        _stores.sort((a, b) => _distanceToUser(a).compareTo(_distanceToUser(b)));
+      }
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    });
+  }
+
+  /// ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
+    // apply filters locally
+    var filteredStores = List<sm.StoreModel>.from(_stores);
+
+    if (selectedType != null) {
+      filteredStores = filteredStores.where((s) => s.type == selectedType).toList();
+    }
+
+    if (selectedBarangay != null) {
+      filteredStores = filteredStores.where((s) => s.barangay == selectedBarangay).toList();
+    }
+
+    if (searchQuery.isNotEmpty) {
+      filteredStores = filteredStores.where(
+        (s) => s.name.toLowerCase().contains(searchQuery.toLowerCase()),
+      ).toList();
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Stores')),
       body: Column(
         children: [
-          _buildFilters(),
+          /// FILTERS
+          StoreFilters(
+            storeTypes: storeTypes,
+            storeTypeIcons: storeTypeIcons,
+            barangays: barangays,
+            selectedType: selectedType,
+            selectedBarangay: selectedBarangay,
+            onTypeChanged: (value) {
+              setState(() {
+                selectedType = value;
+              });
+            },
+            onBarangayChanged: (value) {
+              setState(() {
+                selectedBarangay = value;
+              });
+            },
+            onSearchChanged: (value) {
+              setState(() => searchQuery = value);
+            },
+          ),
+
+          /// LIST
           Expanded(
-            child: StreamBuilder<List<sm.StoreModel>>(
-              stream: _service.getApprovedStoresStream(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : filteredStores.isEmpty
+                    ? const Center(child: Text('No stores found.'))
+                    : ListView.separated(
+                        controller: _scrollController,
+                        itemCount: filteredStores.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final s = filteredStores[index];
+                          final canDelete = isAdmin || currentUserId == s.ownerId;
 
-                var stores = snapshot.data!;
-
-                /// 🔍 TYPE FILTER
-                if (selectedType != null) {
-                  stores =
-                      stores.where((s) => s.type == selectedType).toList();
-                }
-
-                /// 📍 BARANGAY FILTER
-                if (selectedBarangay != null) {
-                  stores = stores
-                      .where((s) => s.barangay == selectedBarangay)
-                      .toList();
-                }
-
-                /// 🔎 SEARCH FILTER
-                if (searchQuery.isNotEmpty) {
-                  stores = stores
-                      .where((s) => s.name
-                          .toLowerCase()
-                          .contains(searchQuery.toLowerCase()))
-                      .toList();
-                }
-
-                /// 📏 SORT BY DISTANCE
-                stores.sort(
-                  (a, b) =>
-                      _distanceToUser(a).compareTo(_distanceToUser(b)),
-                );
-
-                if (stores.isEmpty) {
-                  return const Center(child: Text('No stores found.'));
-                }
-
-                return ListView.separated(
-                  itemCount: stores.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final s = stores[index];
-                    final canDelete =
-                        isAdmin || currentUserId == s.ownerId;
-
-                    return ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: s.imageUrl.isNotEmpty
-                            ? Image.network(
-                                s.imageUrl,
-                                width: 56,
-                                height: 56,
-                                fit: BoxFit.cover,
-                              )
-                            : const Icon(Icons.store, size: 40),
-                      ),
-                      title: Text(
-                        s.name,
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        '${s.averageRating.toStringAsFixed(1)} ★ • '
-                        '${(_distanceToUser(s) / 1000).toStringAsFixed(2)} km',
-                      ),
-                      trailing: canDelete
-                          ? IconButton(
-                              icon: const Icon(Icons.delete,
-                                  color: Colors.red),
-                              onPressed: () async {
-                                final confirm =
-                                    await showDialog<bool>(
-                                  context: context,
-                                  builder: (_) => AlertDialog(
-                                    title:
-                                        const Text('Delete store?'),
-                                    content: const Text(
-                                        'This action cannot be undone.'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(
-                                                context, false),
-                                        child:
-                                            const Text('Cancel'),
+                          return StoreCard(
+                            store: s,
+                            distanceKm: _distanceToUser(s) / 1000,
+                            canDelete: canDelete,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => StoreDetailPage(store: s),
+                              ),
+                            ),
+                            onDelete: canDelete
+                                ? () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (_) => AlertDialog(
+                                        title: const Text('Delete store?'),
+                                        content: const Text(
+                                          'This action cannot be undone.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            child: const Text('Delete'),
+                                          ),
+                                        ],
                                       ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(
-                                                context, true),
-                                        child:
-                                            const Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                );
+                                    );
 
-                                if (confirm == true) {
-                                  await _service.deleteStore(s.id);
-                                }
-                              },
-                            )
-                          : null,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              StoreDetailPage(store: s),
-                        ),
+                                    if (confirm == true) {
+                                      await _service.deleteStore(s.id);
+                                    }
+                                  }
+                                : null,
+                          );
+                        },
                       ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 🔘 FILTER UI (ICON + DROPDOWN + SEARCH)
-  Widget _buildFilters() {
-    return Padding(
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        children: [
-          /// 🔹 ICON TYPE FILTER (HORIZONTAL)
-          SizedBox(
-            height: 70,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: storeTypes.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final type = storeTypes[index];
-                final selected = selectedType == type;
-
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedType = selected ? null : type;
-                    });
-                  },
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: selected
-                            ? Theme.of(context)
-                                .colorScheme
-                                .primary
-                            : Colors.grey[300],
-                        child: Icon(
-                          storeTypeIcons[type],
-                          color:
-                              selected ? Colors.white : Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        type,
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          /// 🔹 BARANGAY DROPDOWN
-          DropdownButtonFormField<String>(
-            initialValue: selectedBarangay,
-            hint: const Text('Filter by Barangay'),
-            items: barangays
-                .map(
-                  (b) => DropdownMenuItem(
-                    value: b,
-                    child: Text(b),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              setState(() => selectedBarangay = value);
-            },
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          /// 🔹 SEARCH BOX
-          TextField(
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: 'Search store name...',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onChanged: (value) {
-              setState(() => searchQuery = value.trim());
-            },
           ),
         ],
       ),

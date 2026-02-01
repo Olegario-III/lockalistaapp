@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '/features/profile/edit_profile_page.dart';
 import '/features/profile/profile_stores_list.dart';
 import '/features/profile/profile_events_list.dart';
+import '/features/profile/verification_form_page.dart';
 import '/core/utils/theme_notifier.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -25,8 +26,11 @@ class _ProfilePageState extends State<ProfilePage> {
   String imageUrl = "";
   String displayName = "";
   String email = "";
+  String role = ""; // role field from Firestore
+  bool hasPendingVerification = false;
 
   bool get isOwner => widget.userId == currentUser?.uid;
+  bool get isVerifiedOwner => role == "owner";
 
   @override
   void initState() {
@@ -50,12 +54,14 @@ class _ProfilePageState extends State<ProfilePage> {
         displayName = data["name"] ?? "";
         imageUrl = data["image"] ?? "";
         email = data["email"] ?? currentUser?.email ?? "";
+        role = data["role"] ?? "";
       });
     } else if (isOwner && currentUser != null) {
       final newData = {
         "name": currentUser!.displayName ?? "",
         "email": currentUser!.email ?? "",
         "image": "",
+        "role": "", // default role
       };
 
       await FirebaseFirestore.instance
@@ -69,11 +75,48 @@ class _ProfilePageState extends State<ProfilePage> {
         displayName = newData["name"]!;
         email = newData["email"]!;
         imageUrl = "";
+        role = "";
       });
     }
+
+    // check if verification request is pending
+    final verDoc = await FirebaseFirestore.instance
+        .collection("verification_requests")
+        .doc(widget.userId)
+        .get();
+
+    if (!mounted) return;
+
+    setState(() {
+      hasPendingVerification =
+          verDoc.exists && (verDoc.data()?['status'] ?? "") == 'pending';
+    });
   }
 
+  /// ---------------- LOGOUT WITH CONFIRMATION ----------------
   void logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirm Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return; // user cancelled
+
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
@@ -141,7 +184,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 24),
-                      if (isOwner)
+                      if (isOwner) ...[
                         ElevatedButton.icon(
                           icon: const Icon(Icons.edit),
                           label: const Text("Edit Profile"),
@@ -159,6 +202,33 @@ class _ProfilePageState extends State<ProfilePage> {
                             minimumSize: const Size(double.infinity, 48),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.verified),
+                          label: Text(isVerifiedOwner
+                              ? "Verified Owner"
+                              : hasPendingVerification
+                                  ? "Pending Verification"
+                                  : "Verify Account"),
+                          onPressed: isVerifiedOwner || hasPendingVerification
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => VerificationFormPage(
+                                          userId: widget.userId),
+                                    ),
+                                  ).then((_) => loadProfile());
+                                },
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 48),
+                            backgroundColor: isVerifiedOwner
+                                ? Colors.green
+                                : null,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_service.dart';
 import '../home/home_page.dart';
 
@@ -17,11 +18,45 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _passCtrl = TextEditingController();
   bool _loading = false;
-  bool _obscurePass = true; // <-- password visibility toggle
+  bool _obscurePass = true;
+  bool _rememberMe = true; // default to remembering
 
-  // ─────────────────────────────────────────────
-  // EMAIL/PASSWORD LOGIN
-  // ─────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _loadLastCredentials();
+  }
+
+  /// Load last email & password from SharedPreferences
+  Future<void> _loadLastCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastEmail = prefs.getString('last_email') ?? '';
+    final lastPass = prefs.getString('last_pass') ?? '';
+    final remember = prefs.getBool('remember_me') ?? true;
+
+    setState(() {
+      _rememberMe = remember;
+      if (remember) {
+        _emailCtrl.text = lastEmail;
+        _passCtrl.text = lastPass;
+      }
+    });
+  }
+
+  /// Save email & password based on rememberMe
+  Future<void> _saveLastCredentials(String email, String pass) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setString('last_email', email);
+      await prefs.setString('last_pass', pass);
+    } else {
+      await prefs.remove('last_email');
+      await prefs.remove('last_pass');
+    }
+    await prefs.setBool('remember_me', _rememberMe);
+  }
+
+  /// ---------------- EMAIL/PASSWORD LOGIN ----------------
   Future<void> login() async {
     if (_loading) return;
     setState(() => _loading = true);
@@ -39,6 +74,9 @@ class _LoginPageState extends State<LoginPage> {
         );
         return;
       }
+
+      // Save email/password based on rememberMe
+      await _saveLastCredentials(_emailCtrl.text.trim(), _passCtrl.text.trim());
 
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -70,9 +108,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // GOOGLE LOGIN
-  // ─────────────────────────────────────────────
+  /// ---------------- GOOGLE LOGIN ----------------
   Future<void> loginWithGoogle() async {
     if (_loading) return;
     setState(() => _loading = true);
@@ -91,6 +127,9 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // Save Google email, clear password
+      await _saveLastCredentials(googleUser.email, '');
 
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -115,15 +154,10 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ─────────────────────────────────────────────
                 // APP LOGO + TAGLINE
-                // ─────────────────────────────────────────────
                 Column(
                   children: [
-                    Image.asset(
-                      'assets/Lockalista_logo02.jpg',
-                      height: 120,
-                    ),
+                    Image.asset('assets/Lockalista_logo02.jpg', height: 120),
                     const SizedBox(height: 12),
                     Text(
                       'DISCOVERING LOCAL EVENTS IN THE MUNICIPALITY OF BINANGONAN, RIZAL',
@@ -137,9 +171,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 32),
 
-                // ─────────────────────────────────────────────
                 // EMAIL / PASSWORD FIELDS
-                // ─────────────────────────────────────────────
                 TextField(
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
@@ -156,18 +188,23 @@ class _LoginPageState extends State<LoginPage> {
                     hintText: "Password",
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePass ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePass = !_obscurePass;
-                        });
-                      },
+                      icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _obscurePass = !_obscurePass),
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
+
+                // REMEMBER ME
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _rememberMe,
+                      onChanged: (v) => setState(() => _rememberMe = v ?? true),
+                    ),
+                    const Text('Remember Me'),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
                 // LOGIN BUTTON
                 SizedBox(
@@ -188,17 +225,11 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // ─────────────────────────────────────────────
                 // GOOGLE LOGIN BUTTON
-                // ─────────────────────────────────────────────
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    icon: Image.asset(
-                      'assets/google_logo.png',
-                      height: 24,
-                      width: 24,
-                    ),
+                    icon: Image.asset('assets/google_logo.png', height: 24, width: 24),
                     label: const Text("Login with Google"),
                     onPressed: _loading ? null : loginWithGoogle,
                   ),
@@ -207,9 +238,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 // REGISTER BUTTON
                 TextButton(
-                  onPressed: _loading
-                      ? null
-                      : () => Navigator.pushNamed(context, '/register'),
+                  onPressed: _loading ? null : () => Navigator.pushNamed(context, '/register'),
                   child: const Text("Create account"),
                 ),
               ],
