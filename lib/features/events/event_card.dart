@@ -1,4 +1,3 @@
-// lib/features/events/event_card.dart
 import 'package:flutter/material.dart';
 import '../../models/event_model.dart' as em;
 
@@ -12,8 +11,6 @@ class EventCard extends StatelessWidget {
   final VoidCallback onView;
   final VoidCallback onDelete;
   final VoidCallback onReport;
-
-  /// Optional: inject custom time text (e.g., "7 days ago" or "3 days left")
   final String? timeText;
 
   const EventCard({
@@ -30,22 +27,16 @@ class EventCard extends StatelessWidget {
     this.timeText,
   });
 
-  /// 🔹 Default time for upcoming events
   String _timeUntilEvent() {
-    final now = DateTime.now();
-    final diff = event.startDate.difference(now);
-
+    final diff = event.startDate.difference(DateTime.now());
     if (diff.inDays > 0) return '${diff.inDays} days left';
     if (diff.inHours > 0) return '${diff.inHours} hrs left';
     if (diff.inMinutes > 0) return '${diff.inMinutes} mins left';
     return 'Starting soon';
   }
 
-  /// 🔹 Helper for past events
   String _timeSinceEvent() {
-    final now = DateTime.now();
-    final diff = now.difference(event.startDate);
-
+    final diff = DateTime.now().difference(event.startDate);
     if (diff.inDays > 0) return '${diff.inDays} days ago';
     if (diff.inHours > 0) return '${diff.inHours} hrs ago';
     if (diff.inMinutes > 0) return '${diff.inMinutes} mins ago';
@@ -54,38 +45,99 @@ class EventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use injected timeText first (from PastEventListPage)
-    // Fallback: if startDate is in the past -> show "X days ago"
-    // Otherwise -> show "X days left"
     final now = DateTime.now();
     final displayTime = timeText ??
-        (event.startDate.isBefore(now) ? _timeSinceEvent() : _timeUntilEvent());
+        (event.startDate.isBefore(now)
+            ? _timeSinceEvent()
+            : _timeUntilEvent());
 
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            /// 🔥 HEADER (Avatar + Name ONLY)
+            /// 🔹 TITLE (TOP)
+            Text(
+              event.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 6),
+
+            /// 🔹 DESCRIPTION
+            Text(
+              event.description,
+              style: TextStyle(color: Colors.grey[800]),
+            ),
+
+            /// 🔹 IMAGE
+            if (event.imageUrl?.isNotEmpty == true) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  event.imageUrl!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 10),
+
+            /// 🔹 INFO CHIPS
+            Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              children: [
+                _Chip(icon: Icons.timer, text: displayTime),
+                if (event.approvedByName != null)
+                  _Chip(
+                    icon: Icons.verified,
+                    text: 'Approved by ${event.approvedByName}',
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+            const Divider(),
+
+            /// 🔹 BOTTOM SECTION (AVATAR + NAME)
             Row(
               children: [
                 CircleAvatar(
-                  radius: 22,
+                  radius: 18,
                   backgroundImage:
                       posterAvatar != null ? NetworkImage(posterAvatar!) : null,
-                  child: posterAvatar == null ? const Icon(Icons.person) : null,
+                  child:
+                      posterAvatar == null ? const Icon(Icons.person) : null,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     posterName,
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
+
+                IconButton(
+                  icon: Icon(
+                    liked ? Icons.favorite : Icons.favorite_border,
+                    color: Colors.red,
+                  ),
+                  onPressed: onLike,
+                ),
+                Text('${event.likesCount}'),
+
                 PopupMenuButton<String>(
                   onSelected: (v) => v == 'delete' ? onDelete() : onReport(),
                   itemBuilder: (_) => [
@@ -104,63 +156,12 @@ class EventCard extends StatelessWidget {
               ],
             ),
 
-            /// ✅ BELOW header, HORIZONTAL, NO OVERLAP
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              children: [
-                _Chip(
-                  icon: Icons.timer,
-                  text: displayTime, // ⚡ Use injected or default
-                ),
-                if (event.approvedByName != null)
-                  _Chip(
-                    icon: Icons.verified,
-                    text: 'Approved by ${event.approvedByName}',
-                  ),
-              ],
-            ),
-
-            if (event.imageUrl?.isNotEmpty == true) ...[
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  event.imageUrl!,
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: onView,
+                child: const Text('View'),
               ),
-            ],
-
-            const SizedBox(height: 10),
-            Text(
-              event.title,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(event.description),
-
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    liked ? Icons.favorite : Icons.favorite_border,
-                    color: Colors.red,
-                  ),
-                  onPressed: onLike,
-                ),
-                Text('${event.likesCount}'),
-                const Spacer(),
-                TextButton(
-                  onPressed: onView,
-                  child: const Text('View'),
-                ),
-              ],
             ),
           ],
         ),
@@ -173,39 +174,28 @@ class _Chip extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _Chip({
-    required this.icon,
-    required this.text,
-  });
+  const _Chip({required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant,
+        color: scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colorScheme.outline.withOpacity(0.4),
-        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          Icon(icon, size: 14, color: scheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             text,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
+            style: TextStyle(
+              fontSize: 12,
+              color: scheme.onSurfaceVariant,
             ),
           ),
         ],

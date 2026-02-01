@@ -183,7 +183,7 @@ class _AddStorePageState extends State<AddStorePage> {
 
                       // Store Type
                       DropdownButtonFormField<String>(
-                        value: selectedType,
+                        initialValue: selectedType,
                         decoration:
                             const InputDecoration(labelText: 'Store Type'),
                         items: storeTypes

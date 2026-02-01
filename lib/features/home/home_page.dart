@@ -1,15 +1,14 @@
-// lib/features/home/home_page.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/services/auth_service.dart';
-import '../stores/store_list_page.dart';
 import '../events/event_list_page.dart';
 import '../events/add_event_page.dart';
+import '../stores/store_list_page.dart';
 import '../stores/add_store_page.dart';
-import '../search/search_page.dart';
 import '../profile/profile_page.dart';
 import '../admin/admin_dashboard_page.dart';
+import '../trending/trending_page.dart'; // ✅ NEW
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -28,14 +27,15 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // Setup pages
+
     _pages = [
-      EventListPage(),
-      StoreListPage(),
-      SearchPage(),
+      const EventListPage(),      // Home
+      const StoreListPage(),      // Places
+      const TrendingPage(),       // Trending
       if (_auth.currentUser != null)
-    ProfilePage(userId: _auth.currentUser!.uid),
+        ProfilePage(userId: _auth.currentUser!.uid),
     ];
+
     _checkAdmin();
   }
 
@@ -51,7 +51,7 @@ class _HomePageState extends State<HomePage> {
     if (doc.exists && doc.data()?['role'] == 'admin') {
       setState(() {
         _isAdmin = true;
-        _pages.add(AdminDashboardPage());
+        _pages.add(const AdminDashboardPage());
       });
     }
   }
@@ -59,13 +59,8 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Main body
       body: _pages[_currentIndex],
-
-      // Floating Action Button for Add Event / Add Store
       floatingActionButton: _buildFAB(context),
-
-      // Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -76,12 +71,12 @@ class _HomePageState extends State<HomePage> {
             label: 'Home',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.store),
-            label: 'Stores',
+            icon: Icon(Icons.place), // ✅ PLACES
+            label: 'Places',
           ),
           const BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Search',
+            icon: Icon(Icons.trending_up), // ✅ TRENDING
+            label: 'Trending',
           ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.person),
@@ -97,12 +92,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  /// Returns the FAB depending on selected tab
+  /// Floating Action Button logic
   Widget? _buildFAB(BuildContext context) {
     final user = _auth.currentUser;
-    if (user == null) return null; // Not logged in, no FAB
+    if (user == null) return null;
 
-    // Events tab
+    // Add Event
     if (_currentIndex == 0) {
       return FloatingActionButton(
         onPressed: () {
@@ -116,7 +111,7 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    // Stores tab
+    // Add Place (Store)
     if (_currentIndex == 1) {
       return FloatingActionButton(
         onPressed: () {
@@ -125,12 +120,11 @@ class _HomePageState extends State<HomePage> {
             MaterialPageRoute(builder: (_) => const AddStorePage()),
           );
         },
-        tooltip: 'Add Store (Pending Approval)',
+        tooltip: 'Add Place (Pending Approval)',
         child: const Icon(Icons.add_business),
       );
     }
 
-    // No FAB for other tabs
     return null;
   }
 }

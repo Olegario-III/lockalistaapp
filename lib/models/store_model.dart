@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'comment_model.dart'; // ✅ Use the single source of truth
+import 'comment_model.dart';
 
 class StoreModel {
   final String id;
   final String name;
-  final String type; // pharmacy, resort, grocery, etc.
+  final String type;
   final String barangay;
   final String? address;
   final GeoPoint location;
@@ -12,21 +12,15 @@ class StoreModel {
   final bool approved;
   final List<String> reportedBy;
 
-  /// Approval info
-  final String? approvedById;    // Admin UID
-  final String? approvedByName;  // Admin Name
-  final Timestamp? approvedAt;    // When it was approved
+  final String? approvedById;
+  final String? approvedByName;
+  final Timestamp? approvedAt;
 
-  /// Rating system
-  final double rating;       // total rating score
-  final int ratingCount;     // number of ratings
+  final double rating;
+  final int ratingCount;
 
-  /// Comments
   final List<CommentModel> comments;
-
   final String? description;
-
-  /// Support multiple images
   final List<String> images;
 
   StoreModel({
@@ -49,14 +43,9 @@ class StoreModel {
     this.images = const [],
   });
 
-  /// ⭐ Average rating (used by UI)
-  double get averageRating =>
-      ratingCount == 0 ? 0.0 : rating / ratingCount;
-
-  /// 🖼️ Main image used by UI (prevents imageUrl error)
+  double get averageRating => ratingCount == 0 ? 0.0 : rating / ratingCount;
   String get imageUrl => images.isNotEmpty ? images.first : '';
 
-  /// 🔹 Firestore → Model
   factory StoreModel.fromMap(Map<String, dynamic> map, String id) {
     return StoreModel(
       id: id,
@@ -81,7 +70,6 @@ class StoreModel {
     );
   }
 
-  /// 🔹 Model → Firestore
   Map<String, dynamic> toMap() {
     return {
       'name': name,

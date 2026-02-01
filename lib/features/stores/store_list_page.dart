@@ -22,6 +22,8 @@ class _StoreListPageState extends State<StoreListPage> {
 
   String? selectedType;
   String? selectedBarangay;
+  String searchQuery = '';
+
   Position? userPosition;
 
   final List<String> storeTypes = [
@@ -32,6 +34,15 @@ class _StoreListPageState extends State<StoreListPage> {
     'karenderya',
     'others',
   ];
+
+  final Map<String, IconData> storeTypeIcons = {
+    'pharmacy': Icons.local_pharmacy,
+    'resort': Icons.beach_access,
+    'grocery': Icons.shopping_cart,
+    'sari-sari store': Icons.storefront,
+    'karenderya': Icons.restaurant,
+    'others': Icons.more_horiz,
+  };
 
   final List<String> barangays = [
     'Batingan',
@@ -66,7 +77,6 @@ class _StoreListPageState extends State<StoreListPage> {
     _checkAdmin();
   }
 
-  /// 🔐 Correct admin check (users.role)
   Future<void> _checkAdmin() async {
     if (currentUserId == null) return;
 
@@ -82,7 +92,6 @@ class _StoreListPageState extends State<StoreListPage> {
     });
   }
 
-  /// 📍 Get user location
   Future<void> _getUserLocation() async {
     final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied ||
@@ -94,7 +103,6 @@ class _StoreListPageState extends State<StoreListPage> {
     if (mounted) setState(() {});
   }
 
-  /// 📏 Distance calculation
   double _distanceToUser(sm.StoreModel store) {
     if (userPosition == null) return double.infinity;
 
@@ -108,8 +116,6 @@ class _StoreListPageState extends State<StoreListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Stores')),
       body: Column(
@@ -125,19 +131,29 @@ class _StoreListPageState extends State<StoreListPage> {
 
                 var stores = snapshot.data!;
 
-                /// 🔍 Filters
+                /// 🔍 TYPE FILTER
                 if (selectedType != null) {
                   stores =
                       stores.where((s) => s.type == selectedType).toList();
                 }
 
+                /// 📍 BARANGAY FILTER
                 if (selectedBarangay != null) {
                   stores = stores
                       .where((s) => s.barangay == selectedBarangay)
                       .toList();
                 }
 
-                /// 📍 Sort by distance
+                /// 🔎 SEARCH FILTER
+                if (searchQuery.isNotEmpty) {
+                  stores = stores
+                      .where((s) => s.name
+                          .toLowerCase()
+                          .contains(searchQuery.toLowerCase()))
+                      .toList();
+                }
+
+                /// 📏 SORT BY DISTANCE
                 stores.sort(
                   (a, b) =>
                       _distanceToUser(a).compareTo(_distanceToUser(b)),
@@ -169,36 +185,17 @@ class _StoreListPageState extends State<StoreListPage> {
                       ),
                       title: Text(
                         s.name,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        style:
+                            const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 2),
-
-                          /// ⭐ rating + distance
-                          Text(
-                            '${s.averageRating.toStringAsFixed(1)} ★ • '
-                            '${(_distanceToUser(s) / 1000).toStringAsFixed(2)} km',
-                          ),
-
-                          /// 👤 approved by
-                          if (s.approvedByName != null)
-                            Text(
-                              'Approved by ${s.approvedByName}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurface
-                                    .withOpacity(0.6),
-                              ),
-                            ),
-                        ],
+                      subtitle: Text(
+                        '${s.averageRating.toStringAsFixed(1)} ★ • '
+                        '${(_distanceToUser(s) / 1000).toStringAsFixed(2)} km',
                       ),
                       trailing: canDelete
                           ? IconButton(
-                              icon: const Icon(
-                                Icons.delete,
-                                color: Colors.red,
-                              ),
+                              icon: const Icon(Icons.delete,
+                                  color: Colors.red),
                               onPressed: () async {
                                 final confirm =
                                     await showDialog<bool>(
@@ -207,8 +204,7 @@ class _StoreListPageState extends State<StoreListPage> {
                                     title:
                                         const Text('Delete store?'),
                                     content: const Text(
-                                      'This action cannot be undone.',
-                                    ),
+                                        'This action cannot be undone.'),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
@@ -252,29 +248,60 @@ class _StoreListPageState extends State<StoreListPage> {
     );
   }
 
-  /// 🔘 Filters UI
+  /// 🔘 FILTER UI (ICON + DROPDOWN + SEARCH)
   Widget _buildFilters() {
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       child: Column(
         children: [
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: storeTypes.map((type) {
-              final selected = selectedType == type;
-              return ChoiceChip(
-                label: Text(type),
-                selected: selected,
-                onSelected: (_) {
-                  setState(() {
-                    selectedType = selected ? null : type;
-                  });
-                },
-              );
-            }).toList(),
+          /// 🔹 ICON TYPE FILTER (HORIZONTAL)
+          SizedBox(
+            height: 70,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: storeTypes.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final type = storeTypes[index];
+                final selected = selectedType == type;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      selectedType = selected ? null : type;
+                    });
+                  },
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: selected
+                            ? Theme.of(context)
+                                .colorScheme
+                                .primary
+                            : Colors.grey[300],
+                        child: Icon(
+                          storeTypeIcons[type],
+                          color:
+                              selected ? Colors.white : Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        type,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
+
           const SizedBox(height: 8),
+
+          /// 🔹 BARANGAY DROPDOWN
           DropdownButtonFormField<String>(
             initialValue: selectedBarangay,
             hint: const Text('Filter by Barangay'),
@@ -293,6 +320,21 @@ class _StoreListPageState extends State<StoreListPage> {
               border: OutlineInputBorder(),
               isDense: true,
             ),
+          ),
+
+          const SizedBox(height: 8),
+
+          /// 🔹 SEARCH BOX
+          TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search store name...',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: (value) {
+              setState(() => searchQuery = value.trim());
+            },
           ),
         ],
       ),
