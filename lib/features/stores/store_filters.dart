@@ -72,7 +72,7 @@ class StoreFilters extends StatelessWidget {
 
           /// 🔹 BARANGAY FILTER
           DropdownButtonFormField<String>(
-            value: selectedBarangay,
+            initialValue: selectedBarangay,
             hint: const Text('Filter by Barangay'),
             items: barangays
                 .map(

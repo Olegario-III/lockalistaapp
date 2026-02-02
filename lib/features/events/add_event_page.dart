@@ -1,4 +1,3 @@
-// lib/features/events/add_event_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -27,10 +26,11 @@ class _AddEventPageState extends State<AddEventPage> {
 
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
+
   bool _isSubmitting = false;
 
   // ────────────────────────────────
-  // 🖼 Pick image
+  // 🖼 Pick image (with preview)
   // ────────────────────────────────
   Future<void> pickImage() async {
     final XFile? file =
@@ -41,7 +41,7 @@ class _AddEventPageState extends State<AddEventPage> {
   }
 
   // ────────────────────────────────
-  // 📅 Pick start date
+  // 📅 Pick dates
   // ────────────────────────────────
   Future<void> pickStartDate() async {
     final date = await showDatePicker(
@@ -50,19 +50,13 @@ class _AddEventPageState extends State<AddEventPage> {
       firstDate: DateTime.now(),
       lastDate: DateTime(2100),
     );
-
-    if (date != null) {
-      setState(() => _startDate = date);
-    }
+    if (date != null) setState(() => _startDate = date);
   }
 
-  // ────────────────────────────────
-  // 📅 Pick end date
-  // ────────────────────────────────
   Future<void> pickEndDate() async {
     if (_startDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please pick a start date first')),
+        const SnackBar(content: Text('Pick start date first')),
       );
       return;
     }
@@ -73,9 +67,34 @@ class _AddEventPageState extends State<AddEventPage> {
       firstDate: _startDate!,
       lastDate: DateTime(2100),
     );
+    if (date != null) setState(() => _endDate = date);
+  }
 
-    if (date != null) {
-      setState(() => _endDate = date);
+  // ────────────────────────────────
+  // ⏱ Cooldown check (30 mins)
+  // ────────────────────────────────
+  Future<void> checkCooldown(String userId, String role) async {
+    if (role == 'admin') return;
+
+    final snap = await FirebaseFirestore.instance
+        .collection('events')
+        .where('ownerId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .get();
+
+    if (snap.docs.isEmpty) return;
+
+    final lastCreated =
+        (snap.docs.first['createdAt'] as Timestamp).toDate();
+
+    final diff = DateTime.now().difference(lastCreated);
+
+    if (diff.inMinutes < 30) {
+      final remaining = 30 - diff.inMinutes;
+      throw Exception(
+        'Please wait $remaining minute(s) before posting another event.',
+      );
     }
   }
 
@@ -90,9 +109,7 @@ class _AddEventPageState extends State<AddEventPage> {
         _startDate == null ||
         _endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('All fields including dates are required'),
-        ),
+        const SnackBar(content: Text('All fields are required')),
       );
       return;
     }
@@ -104,20 +121,25 @@ class _AddEventPageState extends State<AddEventPage> {
 
     try {
       // ────────────────────────────────
-      // 👤 LOAD USER PROFILE FROM FIRESTORE
+      // 👤 Load user
       // ────────────────────────────────
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
           .get();
 
-      final userData = userDoc.data();
-
-      final ownerName = userData?['name'] ?? 'Unknown';
-      final ownerAvatar = userData?['image'];
+      final userData = userDoc.data() ?? {};
+      final role = userData['role'] ?? '';
+      final ownerName = userData['name'] ?? 'Unknown';
+      final ownerAvatar = userData['image'];
 
       // ────────────────────────────────
-      // 🖼 Upload event image
+      // ⏱ Cooldown enforcement
+      // ────────────────────────────────
+      await checkCooldown(currentUser.uid, role);
+
+      // ────────────────────────────────
+      // 🖼 Upload image
       // ────────────────────────────────
       String? imageUrl;
       if (_imageFile != null) {
@@ -127,12 +149,15 @@ class _AddEventPageState extends State<AddEventPage> {
         );
       }
 
+      // ────────────────────────────────
+      // ✅ Auto-approval logic
+      // ────────────────────────────────
+      final status =
+          (role == 'admin' || role == 'owner') ? 'approved' : 'pending';
+
       final firestore = FirestoreService.instance;
       final eventId = firestore.generateId('events');
 
-      // ────────────────────────────────
-      // ✅ CREATE EVENT MODEL (DateTime used)
-      // ────────────────────────────────
       final event = EventModel(
         id: eventId,
         title: titleCtrl.text.trim(),
@@ -141,10 +166,10 @@ class _AddEventPageState extends State<AddEventPage> {
         ownerName: ownerName,
         ownerAvatar: ownerAvatar,
         imageUrl: imageUrl,
-        createdAt: DateTime.now(), // <- REQUIRED
+        createdAt: DateTime.now(),
         startDate: _startDate!,
         endDate: _endDate!,
-        status: 'pending',
+        status: status,
         likesList: const [],
         likesCount: 0,
         comments: const [],
@@ -157,9 +182,11 @@ class _AddEventPageState extends State<AddEventPage> {
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Event Submitted'),
-          content: const Text(
-            'Your event is waiting for admin approval before it appears publicly.',
+          title: const Text('Event Posted'),
+          content: Text(
+            status == 'approved'
+                ? 'Your event is now live.'
+                : 'Your event is waiting for admin approval.',
           ),
           actions: [
             TextButton(
@@ -175,13 +202,16 @@ class _AddEventPageState extends State<AddEventPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to add event: $e')),
+        SnackBar(content: Text(e.toString())),
       );
     } finally {
       setState(() => _isSubmitting = false);
     }
   }
 
+  // ────────────────────────────────
+  // 🧱 UI
+  // ────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -228,17 +258,29 @@ class _AddEventPageState extends State<AddEventPage> {
                 ],
               ),
               const SizedBox(height: 16),
+
+              /// 🖼 IMAGE PREVIEW
               GestureDetector(
                 onTap: pickImage,
                 child: Container(
-                  height: 150,
+                  height: 180,
                   width: double.infinity,
-                  color: Colors.grey[300],
-                  child: _imageFile != null
-                      ? Image.file(_imageFile!, fit: BoxFit.cover)
-                      : const Center(child: Text('Tap to pick an image')),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(12),
+                    image: _imageFile != null
+                        ? DecorationImage(
+                            image: FileImage(_imageFile!),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: _imageFile == null
+                      ? const Center(child: Text('Tap to pick image'))
+                      : null,
                 ),
               ),
+
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isSubmitting ? null : submitEvent,

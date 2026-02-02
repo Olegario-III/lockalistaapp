@@ -99,7 +99,9 @@ class _StoreListPageState extends State<StoreListPage> {
   Future<void> _getUserLocation() async {
     final permission = await Geolocator.requestPermission();
     if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) return;
+        permission == LocationPermission.deniedForever) {
+      return;
+    }
 
     userPosition = await Geolocator.getCurrentPosition();
     if (!mounted) return;

@@ -1,4 +1,3 @@
-// lib/features/stores/add_store_page.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -21,7 +20,6 @@ class _AddStorePageState extends State<AddStorePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
 
-  /// ✅ SAFE DEFAULT
   String selectedType = 'resort';
   String? selectedBarangay;
 
@@ -65,46 +63,72 @@ class _AddStorePageState extends State<AddStorePage> {
     'Tayuman',
   ];
 
-  // ────────────────
+  // ────────────────────────────────
   // 📍 Pick location
-  // ────────────────
+  // ────────────────────────────────
   Future<void> _pickLocation() async {
     final location = await Helpers.pickLocationOnMap(context);
     if (!mounted) return;
-    if (location != null) {
-      setState(() => selectedLocation = location);
-    }
+    if (location != null) setState(() => selectedLocation = location);
   }
 
-  // ────────────────
-  // 🖼 Pick image
-  // ────────────────
+  // ────────────────────────────────
+  // 🖼 Pick image with preview
+  // ────────────────────────────────
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final picked =
         await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
 
-    if (picked != null) {
-      setState(() => selectedImage = File(picked.path));
+    if (picked != null) setState(() => selectedImage = File(picked.path));
+  }
+
+  // ────────────────────────────────
+  // ⏱ Cooldown check (30 mins)
+  // ────────────────────────────────
+  Future<void> _checkCooldown(String userId) async {
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+
+    final role = userDoc.data()?['role'] ?? '';
+
+    if (role == 'admin') return;
+
+    final snap = await FirebaseFirestore.instance
+        .collection('stores')
+        .where('ownerId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(1)
+        .get();
+
+    if (snap.docs.isEmpty) return;
+
+    final lastCreated = (snap.docs.first['createdAt'] as Timestamp).toDate();
+    final diff = DateTime.now().difference(lastCreated);
+
+    if (diff.inMinutes < 30) {
+      final remaining = 30 - diff.inMinutes;
+      throw Exception(
+        'Please wait $remaining minute(s) before adding another store.',
+      );
     }
   }
 
-  // ────────────────
+  // ────────────────────────────────
   // 🚀 Submit store
-  // ────────────────
+  // ────────────────────────────────
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
     if (selectedBarangay == null) {
       Helpers.showSnackBar(context, 'Please select a barangay');
       return;
     }
-
     if (selectedLocation == null) {
       Helpers.showSnackBar(context, 'Please pick a location');
       return;
     }
-
     if (selectedImage == null) {
       Helpers.showSnackBar(context, 'Please pick a store image');
       return;
@@ -113,15 +137,18 @@ class _AddStorePageState extends State<AddStorePage> {
     setState(() => _loading = true);
 
     try {
+      final userId = Helpers.currentUserId();
+
+      // ⏱ Cooldown enforcement
+      await _checkCooldown(userId);
+
+      // 🖼 Upload image
       final imageUrl = await CloudinaryService().uploadFile(
         selectedImage!,
         folder: 'stores',
       );
 
-      if (imageUrl == null) {
-        Helpers.showSnackBar(context, 'Image upload failed');
-        return;
-      }
+      if (imageUrl == null) throw Exception('Image upload failed');
 
       final store = StoreModel(
         id: '',
@@ -129,8 +156,10 @@ class _AddStorePageState extends State<AddStorePage> {
         type: selectedType,
         barangay: selectedBarangay!,
         location: selectedLocation!,
-        ownerId: Helpers.currentUserId(),
+        ownerId: userId,
         images: [imageUrl],
+        approved: false, // all stores start unapproved
+        createdAt: Timestamp.now(),
       );
 
       await FirestoreService.instance.addStore(store);
@@ -143,9 +172,7 @@ class _AddStorePageState extends State<AddStorePage> {
       );
       Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        Helpers.showSnackBar(context, 'Failed to add store: $e');
-      }
+      if (mounted) Helpers.showSnackBar(context, e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -171,7 +198,6 @@ class _AddStorePageState extends State<AddStorePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Store Name
                       TextFormField(
                         controller: _nameController,
                         decoration:
@@ -180,10 +206,8 @@ class _AddStorePageState extends State<AddStorePage> {
                             v == null || v.trim().isEmpty ? 'Required' : null,
                       ),
                       const SizedBox(height: 16),
-
-                      // Store Type
                       DropdownButtonFormField<String>(
-                        initialValue: selectedType,
+                        value: selectedType,
                         decoration:
                             const InputDecoration(labelText: 'Store Type'),
                         items: storeTypes
@@ -192,12 +216,9 @@ class _AddStorePageState extends State<AddStorePage> {
                                   child: Text(t),
                                 ))
                             .toList(),
-                        onChanged: (v) =>
-                            setState(() => selectedType = v!),
+                        onChanged: (v) => setState(() => selectedType = v!),
                       ),
                       const SizedBox(height: 16),
-
-                      // Barangay (NO initialValue = NO crash)
                       DropdownButtonFormField<String>(
                         hint: const Text('Select Barangay'),
                         decoration:
@@ -208,11 +229,9 @@ class _AddStorePageState extends State<AddStorePage> {
                                   child: Text(b),
                                 ))
                             .toList(),
-                        onChanged: (v) =>
-                            setState(() => selectedBarangay = v),
+                        onChanged: (v) => setState(() => selectedBarangay = v),
                       ),
                       const SizedBox(height: 16),
-
                       ElevatedButton.icon(
                         onPressed: _pickLocation,
                         icon: const Icon(Icons.map),
@@ -223,18 +242,29 @@ class _AddStorePageState extends State<AddStorePage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      ElevatedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.image),
-                        label: Text(
-                          selectedImage == null
-                              ? 'Pick Store Image'
-                              : 'Image Selected',
+                      /// IMAGE PREVIEW
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          height: 180,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(12),
+                            image: selectedImage != null
+                                ? DecorationImage(
+                                    image: FileImage(selectedImage!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: selectedImage == null
+                              ? const Center(
+                                  child: Text('Tap to pick store image'),
+                                )
+                              : null,
                         ),
                       ),
                       const SizedBox(height: 32),
-
                       ElevatedButton(
                         onPressed: _submit,
                         child: const Text('Add Store'),

@@ -1,4 +1,3 @@
-// lib/features/profile/profile_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -26,11 +25,28 @@ class _ProfilePageState extends State<ProfilePage> {
   String imageUrl = "";
   String displayName = "";
   String email = "";
-  String role = ""; // role field from Firestore
+  String role = "";
+
   bool hasPendingVerification = false;
+  bool hasStore = false;
+  Timestamp? rejectedAt;
 
   bool get isOwner => widget.userId == currentUser?.uid;
   bool get isVerifiedOwner => role == "owner";
+
+  bool get isOnCooldown {
+    if (rejectedAt == null) return false;
+    final rejectedDate = rejectedAt!.toDate();
+    return DateTime.now()
+        .isBefore(rejectedDate.add(const Duration(days: 7)));
+  }
+
+  Duration get cooldownRemaining {
+    final rejectedDate = rejectedAt!.toDate();
+    return rejectedDate
+        .add(const Duration(days: 7))
+        .difference(DateTime.now());
+  }
 
   @override
   void initState() {
@@ -41,81 +57,92 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> loadProfile() async {
     if (widget.userId.isEmpty) return;
 
-    final doc = await FirebaseFirestore.instance
+    /// ---------- USER ----------
+    final userDoc = await FirebaseFirestore.instance
         .collection("users")
         .doc(widget.userId)
         .get();
 
     if (!mounted) return;
 
-    if (doc.exists) {
-      final data = doc.data()!;
-      setState(() {
-        displayName = data["name"] ?? "";
-        imageUrl = data["image"] ?? "";
-        email = data["email"] ?? currentUser?.email ?? "";
-        role = data["role"] ?? "";
-      });
+    if (userDoc.exists) {
+      final data = userDoc.data()!;
+      displayName = data["name"] ?? "";
+      imageUrl = data["image"] ?? "";
+      email = data["email"] ?? currentUser?.email ?? "";
+      role = data["role"] ?? "";
+      rejectedAt = data["rejectedAt"];
     } else if (isOwner && currentUser != null) {
-      final newData = {
-        "name": currentUser!.displayName ?? "",
-        "email": currentUser!.email ?? "",
-        "image": "",
-        "role": "", // default role
-      };
-
       await FirebaseFirestore.instance
           .collection("users")
           .doc(widget.userId)
-          .set(newData);
-
-      if (!mounted) return;
-
-      setState(() {
-        displayName = newData["name"]!;
-        email = newData["email"]!;
-        imageUrl = "";
-        role = "";
+          .set({
+        "name": currentUser!.displayName ?? "",
+        "email": currentUser!.email ?? "",
+        "image": "",
+        "role": "",
       });
+
+      displayName = currentUser!.displayName ?? "";
+      email = currentUser!.email ?? "";
+      imageUrl = "";
+      role = "";
     }
 
-    // check if verification request is pending
-    final verDoc = await FirebaseFirestore.instance
-        .collection("verification_requests")
-        .doc(widget.userId)
+    /// ---------- STORE CHECK ----------
+    final storeSnap = await FirebaseFirestore.instance
+        .collection("stores")
+        .where("ownerId", isEqualTo: widget.userId)
+        .limit(1)
         .get();
 
-    if (!mounted) return;
+    hasStore = storeSnap.docs.isNotEmpty;
 
-    setState(() {
-      hasPendingVerification =
-          verDoc.exists && (verDoc.data()?['status'] ?? "") == 'pending';
-    });
+    /// ---------- VERIFICATION REQUEST ----------
+    final verSnap = await FirebaseFirestore.instance
+        .collection("verification_requests")
+        .where("userId", isEqualTo: widget.userId)
+        .where("status", isEqualTo: "pending")
+        .limit(1)
+        .get();
+
+    hasPendingVerification = verSnap.docs.isNotEmpty;
+
+    if (!mounted) return;
+    setState(() {});
   }
 
-  /// ---------------- LOGOUT WITH CONFIRMATION ----------------
+  String _formatDuration(Duration d) {
+    final days = d.inDays;
+    final hours = d.inHours % 24;
+    final minutes = d.inMinutes % 60;
+
+    if (days > 0) return '${days}d ${hours}h ${minutes}m';
+    if (hours > 0) return '${hours}h ${minutes}m';
+    return '${minutes}m';
+  }
+
+  /// ---------------- LOGOUT ----------------
   void logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Confirm Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Logout'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
     );
 
-    if (confirmed != true) return; // user cancelled
+    if (confirmed != true) return;
 
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
@@ -126,6 +153,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final themeNotifier = context.watch<ThemeNotifier>();
     final isDarkMode = themeNotifier.isDarkMode;
+
+    final bool canVerify = isOwner &&
+        role != 'admin' &&
+        !isVerifiedOwner &&
+        hasStore &&
+        !hasPendingVerification &&
+        !isOnCooldown;
 
     return Scaffold(
       appBar: AppBar(
@@ -149,9 +183,8 @@ class _ProfilePageState extends State<ProfilePage> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Profile Info Card
+              /// ---------------- PROFILE CARD ----------------
               Card(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -159,7 +192,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       CircleAvatar(
                         radius: 60,
@@ -179,12 +211,11 @@ class _ProfilePageState extends State<ProfilePage> {
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        email,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      Text(email),
                       const SizedBox(height: 24),
+
                       if (isOwner) ...[
+                        /// EDIT PROFILE
                         ElevatedButton.icon(
                           icon: const Icon(Icons.edit),
                           label: const Text("Edit Profile"),
@@ -202,44 +233,67 @@ class _ProfilePageState extends State<ProfilePage> {
                             minimumSize: const Size(double.infinity, 48),
                           ),
                         ),
+
                         const SizedBox(height: 12),
+
+                        /// VERIFY BUTTON
                         ElevatedButton.icon(
                           icon: const Icon(Icons.verified),
-                          label: Text(isVerifiedOwner
-                              ? "Verified Owner"
-                              : hasPendingVerification
-                                  ? "Pending Verification"
-                                  : "Verify Account"),
-                          onPressed: isVerifiedOwner || hasPendingVerification
-                              ? null
-                              : () {
+                          label: Text(
+                            isVerifiedOwner
+                                ? "Verified Owner"
+                                : hasPendingVerification
+                                    ? "Pending Verification"
+                                    : !hasStore
+                                        ? "Add a Store to Verify"
+                                        : isOnCooldown
+                                            ? "Cooldown Active"
+                                            : "Verify Account",
+                          ),
+                          onPressed: canVerify
+                              ? () {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => VerificationFormPage(
-                                          userId: widget.userId),
+                                        userId: widget.userId,
+                                      ),
                                     ),
                                   ).then((_) => loadProfile());
-                                },
+                                }
+                              : null,
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size(double.infinity, 48),
-                            backgroundColor: isVerifiedOwner
-                                ? Colors.green
-                                : null,
+                            backgroundColor:
+                                isVerifiedOwner ? Colors.green : null,
                           ),
                         ),
+
+                        if (isOnCooldown)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'You can request again in ${_formatDuration(cooldownRemaining)}',
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                       ],
                     ],
                   ),
                 ),
               ),
+
               const SizedBox(height: 24),
 
-              // User Added Stores
+              /// ---------------- STORES ----------------
               ProfileStoresList(userId: widget.userId),
+
               const SizedBox(height: 24),
 
-              // User Posted Events
+              /// ---------------- EVENTS ----------------
               ProfileEventsList(userId: widget.userId),
             ],
           ),

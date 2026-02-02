@@ -111,12 +111,12 @@ class _VerificationFormPageState extends State<VerificationFormPage> {
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: isSubmitting ? null : submitVerification,
-              child: isSubmitting
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Submit Verification'),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 48),
               ),
+              child: isSubmitting
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('Submit Verification'),
             ),
           ],
         ),

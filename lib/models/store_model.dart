@@ -23,6 +23,8 @@ class StoreModel {
   final String? description;
   final List<String> images;
 
+  final Timestamp? createdAt; // ← NEW: timestamp for cooldown / ordering
+
   StoreModel({
     required this.id,
     required this.name,
@@ -41,6 +43,7 @@ class StoreModel {
     this.comments = const [],
     this.description,
     this.images = const [],
+    this.createdAt, // ← added to constructor
   });
 
   double get averageRating => ratingCount == 0 ? 0.0 : rating / ratingCount;
@@ -67,6 +70,7 @@ class StoreModel {
           .map((c) => CommentModel.fromMap(c as Map<String, dynamic>))
           .toList(),
       description: map['description'],
+      createdAt: map['createdAt'] as Timestamp?, // ← new field from Firestore
     );
   }
 
@@ -88,6 +92,7 @@ class StoreModel {
       'images': images,
       'comments': comments.map((c) => c.toMap()).toList(),
       'description': description,
+      'createdAt': createdAt, // ← include in map for Firestore
     };
   }
 }
