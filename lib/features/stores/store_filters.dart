@@ -1,3 +1,4 @@
+// lib\features\stores\store_filters.dart
 import 'package:flutter/material.dart';
 
 class StoreFilters extends StatelessWidget {
@@ -38,7 +39,9 @@ class StoreFilters extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, index) {
                 final type = storeTypes[index];
-                final selected = selectedType == type;
+
+                /// ✅ Highlight if selected or matches a custom type
+                final selected = selectedType != null && selectedType!.toLowerCase() == type.toLowerCase();
 
                 return GestureDetector(
                   onTap: () {
@@ -72,7 +75,7 @@ class StoreFilters extends StatelessWidget {
 
           /// 🔹 BARANGAY FILTER
           DropdownButtonFormField<String>(
-            initialValue: selectedBarangay,
+            value: selectedBarangay,
             hint: const Text('Filter by Barangay'),
             items: barangays
                 .map(

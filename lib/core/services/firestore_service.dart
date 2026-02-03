@@ -337,19 +337,31 @@ class FirestoreService {
   }
 
   /// ➕ Add event (always pending)
-  Future<DocumentReference> addEvent(
-    event.EventModel eventModel,
-    String ownerId, {
-    String? ownerAvatarUrl,
-  }) async {
-    return _db.collection('events').add({
-      ...eventModel.toMap(),
-      'ownerId': ownerId,
-      'ownerAvatar': ownerAvatarUrl ?? '',
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
+Future<DocumentReference> addEvent(
+  event.EventModel eventModel,
+  String ownerId,
+  String role, {
+  String? ownerAvatarUrl,
+}) async {
+  final status =
+      (role == 'admin' || role == 'owner') ? 'approved' : 'pending';
+
+  return _db.collection('events').add({
+    ...eventModel.toMap(),
+
+    /// system fields
+    'ownerId': ownerId,
+    'ownerAvatar': ownerAvatarUrl ?? '',
+    'status': status,
+    'createdAt': FieldValue.serverTimestamp(),
+
+    /// auto-approval metadata
+    if (status == 'approved') ...{
+      'approvedById': ownerId,
+      'approvedAt': FieldValue.serverTimestamp(),
+    },
+  });
+}
 
   /// ➕ Add event with predefined ID
   Future<void> addEventWithId(

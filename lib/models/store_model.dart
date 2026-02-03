@@ -4,7 +4,13 @@ import 'comment_model.dart';
 class StoreModel {
   final String id;
   final String name;
+
+  /// Actual store type (could be user-specified if dropdown = 'others')
   final String type;
+
+  /// Original dropdown selection ('pharmacy', 'resort', 'others', etc.)
+  final String? originalDropdownType;
+
   final String barangay;
   final String? address;
   final GeoPoint location;
@@ -23,12 +29,13 @@ class StoreModel {
   final String? description;
   final List<String> images;
 
-  final Timestamp? createdAt; // ← NEW: timestamp for cooldown / ordering
+  final Timestamp? createdAt; // For cooldown / ordering
 
   StoreModel({
     required this.id,
     required this.name,
     required this.type,
+    this.originalDropdownType,
     required this.barangay,
     this.address,
     required this.location,
@@ -43,17 +50,19 @@ class StoreModel {
     this.comments = const [],
     this.description,
     this.images = const [],
-    this.createdAt, // ← added to constructor
+    this.createdAt,
   });
 
   double get averageRating => ratingCount == 0 ? 0.0 : rating / ratingCount;
   String get imageUrl => images.isNotEmpty ? images.first : '';
 
+  /// Factory constructor from Firestore map
   factory StoreModel.fromMap(Map<String, dynamic> map, String id) {
     return StoreModel(
       id: id,
       name: map['name'] ?? '',
       type: map['type'] ?? '',
+      originalDropdownType: map['originalDropdownType'], // <-- new field
       barangay: map['barangay'] ?? '',
       address: map['address'],
       location: map['location'] as GeoPoint,
@@ -70,14 +79,16 @@ class StoreModel {
           .map((c) => CommentModel.fromMap(c as Map<String, dynamic>))
           .toList(),
       description: map['description'],
-      createdAt: map['createdAt'] as Timestamp?, // ← new field from Firestore
+      createdAt: map['createdAt'] as Timestamp?,
     );
   }
 
+  /// Convert to Firestore map
   Map<String, dynamic> toMap() {
     return {
       'name': name,
       'type': type,
+      'originalDropdownType': originalDropdownType, // <-- new field
       'barangay': barangay,
       'address': address,
       'location': location,
@@ -92,7 +103,7 @@ class StoreModel {
       'images': images,
       'comments': comments.map((c) => c.toMap()).toList(),
       'description': description,
-      'createdAt': createdAt, // ← include in map for Firestore
+      'createdAt': createdAt,
     };
   }
 }

@@ -33,8 +33,7 @@ class _AddEventPageState extends State<AddEventPage> {
   // 🖼 Pick image (with preview)
   // ────────────────────────────────
   Future<void> pickImage() async {
-    final XFile? file =
-        await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
 
     setState(() => _imageFile = File(file.path));
@@ -55,9 +54,9 @@ class _AddEventPageState extends State<AddEventPage> {
 
   Future<void> pickEndDate() async {
     if (_startDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pick start date first')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Pick start date first')));
       return;
     }
 
@@ -85,8 +84,7 @@ class _AddEventPageState extends State<AddEventPage> {
 
     if (snap.docs.isEmpty) return;
 
-    final lastCreated =
-        (snap.docs.first['createdAt'] as Timestamp).toDate();
+    final lastCreated = (snap.docs.first['createdAt'] as Timestamp).toDate();
 
     final diff = DateTime.now().difference(lastCreated);
 
@@ -108,9 +106,9 @@ class _AddEventPageState extends State<AddEventPage> {
         descCtrl.text.trim().isEmpty ||
         _startDate == null ||
         _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All fields are required')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('All fields are required')));
       return;
     }
 
@@ -152,8 +150,9 @@ class _AddEventPageState extends State<AddEventPage> {
       // ────────────────────────────────
       // ✅ Auto-approval logic
       // ────────────────────────────────
-      final status =
-          (role == 'admin' || role == 'owner') ? 'approved' : 'pending';
+      final status = (role == 'admin' || role == 'owner')
+          ? 'approved'
+          : 'pending';
 
       final firestore = FirestoreService.instance;
       final eventId = firestore.generateId('events');
@@ -175,7 +174,7 @@ class _AddEventPageState extends State<AddEventPage> {
         comments: const [],
       );
 
-      await firestore.addEvent(event, currentUser.uid);
+      await firestore.addEvent(event, currentUser.uid, role);
 
       if (!mounted) return;
 
@@ -201,9 +200,9 @@ class _AddEventPageState extends State<AddEventPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       setState(() => _isSubmitting = false);
     }
@@ -284,9 +283,7 @@ class _AddEventPageState extends State<AddEventPage> {
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isSubmitting ? null : submitEvent,
-                child: Text(
-                  _isSubmitting ? 'Submitting...' : 'Submit Event',
-                ),
+                child: Text(_isSubmitting ? 'Submitting...' : 'Submit Event'),
               ),
             ],
           ),

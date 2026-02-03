@@ -19,6 +19,7 @@ class AddStorePage extends StatefulWidget {
 class _AddStorePageState extends State<AddStorePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _otherTypeController = TextEditingController(); // 👈 For "others"
 
   String selectedType = 'resort';
   String? selectedBarangay;
@@ -121,6 +122,13 @@ class _AddStorePageState extends State<AddStorePage> {
   // ────────────────────────────────
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (selectedType == 'others' &&
+        (_otherTypeController.text.trim().isEmpty)) {
+      Helpers.showSnackBar(context, 'Please specify the store type');
+      return;
+    }
+
     if (selectedBarangay == null) {
       Helpers.showSnackBar(context, 'Please select a barangay');
       return;
@@ -153,12 +161,14 @@ class _AddStorePageState extends State<AddStorePage> {
       final store = StoreModel(
         id: '',
         name: _nameController.text.trim(),
-        type: selectedType,
+        type: selectedType == 'others'
+            ? _otherTypeController.text.trim()
+            : selectedType, // 👈 Use custom type if "others"
         barangay: selectedBarangay!,
         location: selectedLocation!,
         ownerId: userId,
         images: [imageUrl],
-        approved: false, // all stores start unapproved
+        approved: false,
         createdAt: Timestamp.now(),
       );
 
@@ -181,6 +191,7 @@ class _AddStorePageState extends State<AddStorePage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _otherTypeController.dispose(); // 👈 dispose
     super.dispose();
   }
 
@@ -198,6 +209,7 @@ class _AddStorePageState extends State<AddStorePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Store Name
                       TextFormField(
                         controller: _nameController,
                         decoration:
@@ -206,6 +218,8 @@ class _AddStorePageState extends State<AddStorePage> {
                             v == null || v.trim().isEmpty ? 'Required' : null,
                       ),
                       const SizedBox(height: 16),
+
+                      // Store Type Dropdown
                       DropdownButtonFormField<String>(
                         value: selectedType,
                         decoration:
@@ -216,9 +230,39 @@ class _AddStorePageState extends State<AddStorePage> {
                                   child: Text(t),
                                 ))
                             .toList(),
-                        onChanged: (v) => setState(() => selectedType = v!),
+                        onChanged: (v) {
+                          setState(() {
+                            selectedType = v!;
+                            if (selectedType != 'others') {
+                              _otherTypeController.clear();
+                            }
+                          });
+                        },
                       ),
+
+                      // Show text field if "others" is selected
+                      if (selectedType == 'others') ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _otherTypeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Specify store type',
+                            hintText:
+                                'e.g. Internet Cafe, Hardware, Printing Shop',
+                          ),
+                          validator: (v) {
+                            if (selectedType == 'others' &&
+                                (v == null || v.trim().isEmpty)) {
+                              return 'Please specify the store type';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+
                       const SizedBox(height: 16),
+
+                      // Barangay Dropdown
                       DropdownButtonFormField<String>(
                         hint: const Text('Select Barangay'),
                         decoration:
@@ -231,7 +275,10 @@ class _AddStorePageState extends State<AddStorePage> {
                             .toList(),
                         onChanged: (v) => setState(() => selectedBarangay = v),
                       ),
+
                       const SizedBox(height: 16),
+
+                      // Pick Location Button
                       ElevatedButton.icon(
                         onPressed: _pickLocation,
                         icon: const Icon(Icons.map),
@@ -242,7 +289,8 @@ class _AddStorePageState extends State<AddStorePage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      /// IMAGE PREVIEW
+
+                      // Image Picker
                       GestureDetector(
                         onTap: _pickImage,
                         child: Container(
@@ -265,6 +313,8 @@ class _AddStorePageState extends State<AddStorePage> {
                         ),
                       ),
                       const SizedBox(height: 32),
+
+                      // Submit Button
                       ElevatedButton(
                         onPressed: _submit,
                         child: const Text('Add Store'),

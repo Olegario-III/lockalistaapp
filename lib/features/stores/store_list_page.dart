@@ -106,7 +106,6 @@ class _StoreListPageState extends State<StoreListPage> {
     userPosition = await Geolocator.getCurrentPosition();
     if (!mounted) return;
 
-    // Re-sort stores by distance if we already have them
     if (_stores.isNotEmpty) {
       setState(() {
         _stores.sort((a, b) => _distanceToUser(a).compareTo(_distanceToUser(b)));
@@ -138,14 +137,11 @@ class _StoreListPageState extends State<StoreListPage> {
         ),
       );
 
-      // sort by distance if location known
       if (userPosition != null) {
         _stores.sort((a, b) => _distanceToUser(a).compareTo(_distanceToUser(b)));
       }
 
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     });
   }
 
@@ -155,18 +151,50 @@ class _StoreListPageState extends State<StoreListPage> {
     // apply filters locally
     var filteredStores = List<sm.StoreModel>.from(_stores);
 
+    // 🔹 TYPE FILTER
     if (selectedType != null) {
-      filteredStores = filteredStores.where((s) => s.type == selectedType).toList();
+      final filterLower = selectedType!.trim().toLowerCase();
+      final normalTypes = storeTypes.map((e) => e.toLowerCase()).toList();
+
+      filteredStores = filteredStores.where((s) {
+        final original = s.originalDropdownType?.trim().toLowerCase();
+        final type = s.type.trim().toLowerCase();
+
+        if (filterLower == 'others') {
+          // include literal "others" + any custom types
+          if (original == 'others') return true;
+          if (original == null && type != '' && !normalTypes.contains(type)) return true;
+          if (original == null && type == 'others') return true;
+          return false;
+        }
+
+        // Normal types match
+        if (original == null) return type == filterLower;
+        if (original == filterLower) return true;
+        if (original == 'others' && type == filterLower) return true;
+
+        return false;
+      }).toList();
+
+      // 🔹 DEBUG
+      print('Selected type: $selectedType, filteredStores count: ${filteredStores.length}');
+      for (var s in filteredStores) {
+        print('Store: ${s.name}, original: ${s.originalDropdownType}, type: ${s.type}');
+      }
     }
 
+    // 🔹 BARANGAY FILTER
     if (selectedBarangay != null) {
-      filteredStores = filteredStores.where((s) => s.barangay == selectedBarangay).toList();
+      filteredStores = filteredStores
+          .where((s) => s.barangay == selectedBarangay)
+          .toList();
     }
 
+    // 🔹 SEARCH FILTER
     if (searchQuery.isNotEmpty) {
-      filteredStores = filteredStores.where(
-        (s) => s.name.toLowerCase().contains(searchQuery.toLowerCase()),
-      ).toList();
+      filteredStores = filteredStores
+          .where((s) => s.name.toLowerCase().contains(searchQuery.toLowerCase()))
+          .toList();
     }
 
     return Scaffold(
@@ -180,19 +208,9 @@ class _StoreListPageState extends State<StoreListPage> {
             barangays: barangays,
             selectedType: selectedType,
             selectedBarangay: selectedBarangay,
-            onTypeChanged: (value) {
-              setState(() {
-                selectedType = value;
-              });
-            },
-            onBarangayChanged: (value) {
-              setState(() {
-                selectedBarangay = value;
-              });
-            },
-            onSearchChanged: (value) {
-              setState(() => searchQuery = value);
-            },
+            onTypeChanged: (value) => setState(() => selectedType = value),
+            onBarangayChanged: (value) => setState(() => selectedBarangay = value),
+            onSearchChanged: (value) => setState(() => searchQuery = value),
           ),
 
           /// LIST
@@ -230,13 +248,11 @@ class _StoreListPageState extends State<StoreListPage> {
                                         ),
                                         actions: [
                                           TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
+                                            onPressed: () => Navigator.pop(context, false),
                                             child: const Text('Cancel'),
                                           ),
                                           TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
+                                            onPressed: () => Navigator.pop(context, true),
                                             child: const Text('Delete'),
                                           ),
                                         ],
