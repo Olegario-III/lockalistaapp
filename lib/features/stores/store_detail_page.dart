@@ -1,3 +1,5 @@
+// lib/features/stores/store_detail_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -5,9 +7,11 @@ import '../../core/services/firestore_service.dart';
 import '../../core/utils/helpers.dart';
 import '../../models/store_model.dart';
 import '../../models/comment_model.dart' as cm;
+import 'edit_store_page.dart';
 
 class StoreDetailPage extends StatefulWidget {
   final StoreModel store;
+
   const StoreDetailPage({super.key, required this.store});
 
   @override
@@ -55,102 +59,90 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
     await FirestoreService.instance.deleteStoreComment(widget.store.id, commentId);
   }
 
-  /// ================= REPORT COMMENT =================
+  /* ================= REPORT COMMENT ================= */
   Future<void> _reportComment(cm.CommentModel comment) async {
-  final currentUserId = Helpers.currentUserId();
-  final currentUserName = Helpers.currentUserName(); // make sure this exists
+    final currentUserId = Helpers.currentUserId();
+    final currentUserName = Helpers.currentUserName();
 
-  if (comment.userId == currentUserId) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("You can't report your own comment")),
-    );
-    return;
-  }
-
-  const reasons = [
-    'Spam',
-    'Harassment',
-    'Hate speech',
-    'Inappropriate content',
-    'Scam',
-  ];
-
-  String? selectedReason;
-
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Report Comment'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: reasons.map((reason) {
-                return RadioListTile<String>(
-                  title: Text(reason),
-                  value: reason,
-                  groupValue: selectedReason,
-                  onChanged: (value) {
-                    setState(() => selectedReason = value);
-                  },
-                );
-              }).toList(),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: selectedReason == null
-                    ? null
-                    : () => Navigator.pop(context, true),
-                child: const Text('Report'),
-              ),
-            ],
-          );
-        },
+    if (comment.userId == currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You can't report your own comment")),
       );
-    },
-  );
+      return;
+    }
 
-  if (confirmed != true || selectedReason == null) return;
+    const reasons = [
+      'Spam',
+      'Harassment',
+      'Hate speech',
+      'Inappropriate content',
+      'Scam',
+    ];
 
-  try {
-    await FirestoreService.instance.reportStoreComment(
-      storeId: widget.store.id,
-      storeName: widget.store.name,
+    String? selectedReason;
 
-      commentId: comment.id,
-
-      reportedUserId: comment.userId,
-      reportedUserName: comment.userName, // make sure CommentModel has this
-
-      reportedBy: currentUserId,
-      reportedByName: currentUserName,
-
-      reason: selectedReason!,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Report Comment'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: reasons.map((reason) {
+                  return RadioListTile<String>(
+                    title: Text(reason),
+                    value: reason,
+                    groupValue: selectedReason,
+                    onChanged: (value) => setState(() => selectedReason = value),
+                  );
+                }).toList(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedReason == null ? null : () => Navigator.pop(context, true),
+                  child: const Text('Report'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (!mounted) return;
+    if (confirmed != true || selectedReason == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Comment reported successfully')),
-    );
-  } catch (e) {
-    if (!mounted) return;
+    try {
+      await FirestoreService.instance.reportStoreComment(
+        storeId: widget.store.id,
+        storeName: widget.store.name,
+        commentId: comment.id,
+        reportedUserId: comment.userId,
+        reportedUserName: comment.userName ?? '',
+        reportedBy: currentUserId,
+        reportedByName: currentUserName,
+        reason: selectedReason!,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          e.toString().replaceFirst('Exception: ', ''),
-        ),
-      ),
-    );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Comment reported successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
   }
-}
-  /* ================= UI ================= */
+
+  /* ================= STAR UI ================= */
   Widget _buildStarRating(double value, {void Function(double)? onChanged}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -159,16 +151,14 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
         return IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          icon: Icon(
-            starValue <= value ? Icons.star : Icons.star_border,
-            color: Colors.amber,
-          ),
+          icon: Icon(starValue <= value ? Icons.star : Icons.star_border, color: Colors.amber),
           onPressed: onChanged == null ? null : () => onChanged(starValue.toDouble()),
         );
       }),
     );
   }
 
+  /* ================= UI ================= */
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -177,11 +167,18 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
       appBar: AppBar(
         title: Text(store.name),
         actions: [
-          if (isOwnerOrAdmin)
+          if (isOwnerOrAdmin) ...[
             IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _deleteStore,
+              icon: const Icon(Icons.edit),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => EditStorePage(store: store)),
+                );
+              },
             ),
+            IconButton(icon: const Icon(Icons.delete), onPressed: _deleteStore),
+          ],
         ],
       ),
       body: ListView(
@@ -200,6 +197,8 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
           const SizedBox(height: 16),
           Text('Type: ${store.type}'),
           Text('Barangay: ${store.barangay}'),
+          if (store.address != null && store.address!.isNotEmpty) Text('Address: ${store.address}'),
+          const SizedBox(height: 8),
           Row(
             children: [
               _buildStarRating(store.averageRating),
@@ -207,10 +206,11 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
               Text('(${store.ratingCount})'),
             ],
           ),
-          if (store.description != null && store.description!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(store.description!),
-          ],
+          if (store.description != null && store.description!.isNotEmpty)
+            ...[
+              const SizedBox(height: 8),
+              Text(store.description!),
+            ],
           const SizedBox(height: 16),
           ElevatedButton.icon(
             icon: const Icon(Icons.map),
@@ -218,13 +218,8 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
             onPressed: () => Helpers.openMap(store.location.latitude, store.location.longitude),
           ),
           const SizedBox(height: 32),
-
-          const Text(
-            'Comments',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
+          const Text('Comments', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-
           StreamBuilder<QuerySnapshot>(
             stream: FirestoreService.instance.storeCommentsStream(store.id),
             builder: (context, snapshot) {
@@ -238,7 +233,6 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
               return Column(
                 children: comments.map((comment) {
                   final canDelete = comment.userId == Helpers.currentUserId() || Helpers.isAdmin();
-
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     child: Padding(
@@ -258,12 +252,13 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
                                     : null,
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                comment.userName ?? 'Anonymous',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              Expanded(
+                                child: Text(
+                                  comment.userName ?? 'Anonymous',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
-                              const Spacer(),
-                              Text(comment.createdAt.toDate().toString()),
+                              Text(comment.createdAt.toDate().toString(), style: const TextStyle(fontSize: 11)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -274,33 +269,25 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
                           Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.thumb_up, size: 18),
-                                onPressed: () => FirestoreService.instance.toggleStoreCommentLike(
-                                  storeId: store.id,
-                                  commentId: comment.id,
-                                  userId: Helpers.currentUserId(),
-                                ),
-                              ),
+                                  icon: const Icon(Icons.thumb_up, size: 18),
+                                  onPressed: () => FirestoreService.instance.toggleStoreCommentLike(
+                                        storeId: store.id,
+                                        commentId: comment.id,
+                                        userId: Helpers.currentUserId(),
+                                      )),
                               Text('${comment.likes.length}'),
                               IconButton(
-                                icon: const Icon(Icons.thumb_down, size: 18),
-                                onPressed: () => FirestoreService.instance.toggleStoreCommentDislike(
-                                  storeId: store.id,
-                                  commentId: comment.id,
-                                  userId: Helpers.currentUserId(),
-                                ),
-                              ),
+                                  icon: const Icon(Icons.thumb_down, size: 18),
+                                  onPressed: () => FirestoreService.instance.toggleStoreCommentDislike(
+                                        storeId: store.id,
+                                        commentId: comment.id,
+                                        userId: Helpers.currentUserId(),
+                                      )),
                               Text('${comment.dislikes.length}'),
                               const Spacer(),
-                              IconButton(
-                                icon: const Icon(Icons.report, size: 18),
-                                onPressed: () => _reportComment(comment),
-                              ),
+                              IconButton(icon: const Icon(Icons.report, size: 18), onPressed: () => _reportComment(comment)),
                               if (canDelete)
-                                IconButton(
-                                  icon: const Icon(Icons.delete, size: 18),
-                                  onPressed: () => _deleteComment(comment.id),
-                                ),
+                                IconButton(icon: const Icon(Icons.delete, size: 18), onPressed: () => _deleteComment(comment.id)),
                             ],
                           ),
                         ],
@@ -311,9 +298,7 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
               );
             },
           ),
-
           const SizedBox(height: 24),
-
           TextField(
             controller: _commentController,
             decoration: const InputDecoration(
@@ -330,10 +315,7 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
             ],
           ),
           const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: _addComment,
-            child: const Text('Submit Comment'),
-          ),
+          ElevatedButton(onPressed: _addComment, child: const Text('Submit Comment')),
         ],
       ),
     );

@@ -1,3 +1,4 @@
+// lib\features\stores\add_store_page.dart
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -20,6 +21,7 @@ class _AddStorePageState extends State<AddStorePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _otherTypeController = TextEditingController(); // 👈 For "others"
+  final _addressController = TextEditingController(); // 👈 NEW
 
   String selectedType = 'resort';
   String? selectedBarangay;
@@ -78,8 +80,10 @@ class _AddStorePageState extends State<AddStorePage> {
   // ────────────────────────────────
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked =
-        await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
 
     if (picked != null) setState(() => selectedImage = File(picked.path));
   }
@@ -165,6 +169,7 @@ class _AddStorePageState extends State<AddStorePage> {
             ? _otherTypeController.text.trim()
             : selectedType, // 👈 Use custom type if "others"
         barangay: selectedBarangay!,
+        address: _addressController.text.trim(),
         location: selectedLocation!,
         ownerId: userId,
         images: [imageUrl],
@@ -176,10 +181,7 @@ class _AddStorePageState extends State<AddStorePage> {
 
       if (!mounted) return;
 
-      Helpers.showSnackBar(
-        context,
-        'Store added! Waiting for admin approval.',
-      );
+      Helpers.showSnackBar(context, 'Store added! Waiting for admin approval.');
       Navigator.pop(context);
     } catch (e) {
       if (mounted) Helpers.showSnackBar(context, e.toString());
@@ -192,6 +194,7 @@ class _AddStorePageState extends State<AddStorePage> {
   void dispose() {
     _nameController.dispose();
     _otherTypeController.dispose(); // 👈 dispose
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -212,8 +215,9 @@ class _AddStorePageState extends State<AddStorePage> {
                       // Store Name
                       TextFormField(
                         controller: _nameController,
-                        decoration:
-                            const InputDecoration(labelText: 'Store Name'),
+                        decoration: const InputDecoration(
+                          labelText: 'Store Name',
+                        ),
                         validator: (v) =>
                             v == null || v.trim().isEmpty ? 'Required' : null,
                       ),
@@ -221,14 +225,14 @@ class _AddStorePageState extends State<AddStorePage> {
 
                       // Store Type Dropdown
                       DropdownButtonFormField<String>(
-                        value: selectedType,
-                        decoration:
-                            const InputDecoration(labelText: 'Store Type'),
+                        initialValue: selectedType,
+                        decoration: const InputDecoration(
+                          labelText: 'Store Type',
+                        ),
                         items: storeTypes
-                            .map((t) => DropdownMenuItem(
-                                  value: t,
-                                  child: Text(t),
-                                ))
+                            .map(
+                              (t) => DropdownMenuItem(value: t, child: Text(t)),
+                            )
                             .toList(),
                         onChanged: (v) {
                           setState(() {
@@ -265,15 +269,29 @@ class _AddStorePageState extends State<AddStorePage> {
                       // Barangay Dropdown
                       DropdownButtonFormField<String>(
                         hint: const Text('Select Barangay'),
-                        decoration:
-                            const InputDecoration(labelText: 'Barangay'),
+                        decoration: const InputDecoration(
+                          labelText: 'Barangay',
+                        ),
                         items: barangays
-                            .map((b) => DropdownMenuItem(
-                                  value: b,
-                                  child: Text(b),
-                                ))
+                            .map(
+                              (b) => DropdownMenuItem(value: b, child: Text(b)),
+                            )
                             .toList(),
                         onChanged: (v) => setState(() => selectedBarangay = v),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Address TextField
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: const InputDecoration(
+                          labelText: 'Street / Detailed Address',
+                          hintText: 'e.g. Purok 3, Near Barangay Hall',
+                        ),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Address is required'
+                            : null,
                       ),
 
                       const SizedBox(height: 16),
