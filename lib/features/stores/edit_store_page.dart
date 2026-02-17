@@ -276,7 +276,7 @@ class _EditStorePageState extends State<EditStorePage> {
 
                       /// STORE TYPE
                       DropdownButtonFormField<String>(
-                        value: selectedType,
+                        initialValue: selectedType,
                         decoration:
                             const InputDecoration(labelText: 'Store Type'),
                         items: storeTypes
@@ -314,7 +314,7 @@ class _EditStorePageState extends State<EditStorePage> {
 
                       /// BARANGAY
                       DropdownButtonFormField<String>(
-                        value: selectedBarangay,
+                        initialValue: selectedBarangay,
                         decoration:
                             const InputDecoration(labelText: 'Barangay'),
                         items: barangays

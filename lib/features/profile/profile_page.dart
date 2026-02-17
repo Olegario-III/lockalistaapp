@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 
+import '/features/profile/customer_service_page.dart';
 import '/features/profile/edit_profile_page.dart';
 import '/features/profile/profile_stores_list.dart';
 import '/features/profile/profile_events_list.dart';
@@ -280,6 +281,27 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ),
                           ),
+
+                        const SizedBox(height: 12),
+
+                        /// ✅ CUSTOMER SERVICE BUTTON
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.support_agent),
+                          label: const Text("Customer Service"),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const CustomerServicePage(),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            minimumSize:
+                                const Size(double.infinity, 48),
+                          ),
+                        ),
                       ],
                     ],
                   ),

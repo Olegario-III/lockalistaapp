@@ -5,6 +5,7 @@ import 'approvals/approval_events_page.dart';
 import 'approvals/approval_stores_page.dart';
 import 'verification/verification_requests_page.dart';
 import 'reports/reported_accounts_page.dart';
+import 'customer_messages/admin_customer_messages_page.dart';
 
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({super.key});
@@ -12,7 +13,7 @@ class AdminDashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5, // ✅ changed from 4 to 5
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Admin Dashboard'),
@@ -23,6 +24,7 @@ class AdminDashboardPage extends StatelessWidget {
               Tab(text: 'Pending Stores'),
               Tab(text: 'Verifications'),
               Tab(text: 'Reports'),
+              Tab(text: 'Messages'), // ✅ NEW TAB
             ],
           ),
         ),
@@ -32,6 +34,7 @@ class AdminDashboardPage extends StatelessWidget {
             ApprovalStoresPage(),
             VerificationRequestsPage(),
             ReportedAccountsPage(),
+            AdminCustomerMessagesPage(), // ✅ NEW PAGE
           ],
         ),
       ),
