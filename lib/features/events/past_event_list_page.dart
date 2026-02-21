@@ -1,9 +1,11 @@
+// lib/features/events/past_event_list_page.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/services/firestore_service.dart';
 import '../../models/event_model.dart' as em;
+import '../profile/profile_page.dart';
 import 'event_card.dart';
 import 'event_detail_page.dart';
 
@@ -20,6 +22,9 @@ class _PastEventListPageState extends State<PastEventListPage> {
 
   String searchQuery = '';
   bool isAdmin = false;
+
+  /// Cache for owner avatars to reduce reads and blinking
+  final Map<String, String> _avatarCache = {};
 
   @override
   void initState() {
@@ -42,17 +47,29 @@ class _PastEventListPageState extends State<PastEventListPage> {
     });
   }
 
-  /// ✅ Use startDate for events
   DateTime _eventDate(em.EventModel e) => e.startDate;
 
-  /// 🔹 Returns string like "7 days ago"
   String _timeSinceEvent(em.EventModel e) {
     final diff = DateTime.now().difference(_eventDate(e));
-
     if (diff.inDays > 0) return '${diff.inDays} days ago';
     if (diff.inHours > 0) return '${diff.inHours} hrs ago';
     if (diff.inMinutes > 0) return '${diff.inMinutes} mins ago';
     return 'Just now';
+  }
+
+  /// Fetch avatar from Firestore or cache
+  Future<String> _getAvatar(String ownerId) async {
+    if (_avatarCache.containsKey(ownerId)) return _avatarCache[ownerId]!;
+
+    try {
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(ownerId).get();
+      final avatar = (doc.data()?['image'] ?? '') as String;
+      _avatarCache[ownerId] = avatar;
+      return avatar;
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<void> _confirmDelete(em.EventModel e) async {
@@ -121,13 +138,11 @@ class _PastEventListPageState extends State<PastEventListPage> {
 
                 final events = (snapshot.data ?? [])
                     .where((e) => _eventDate(e).isBefore(now))
-                    .where(
-                      (e) => e.title.toLowerCase().contains(searchQuery),
-                    )
+                    .where((e) => e.title.toLowerCase().contains(searchQuery))
                     .toList()
-                  ..sort(
-                    (a, b) => _eventDate(b).compareTo(_eventDate(a)),
-                  );
+                      ..sort(
+                        (a, b) => _eventDate(b).compareTo(_eventDate(a)),
+                      );
 
                 if (events.isEmpty) {
                   return const Center(
@@ -135,47 +150,126 @@ class _PastEventListPageState extends State<PastEventListPage> {
                   );
                 }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: events.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final e = events[index];
-                    final liked = e.likesList.contains(currentUser?.uid);
-                    final canDelete = isAdmin; // 🔐 ADMIN ONLY
-
-                    return EventCard(
-                      event: e,
-                      posterName: e.ownerName,
-                      posterAvatar: e.ownerAvatar,
-                      liked: liked,
-                      canDelete: canDelete,
-
-                      /// ⏱ Time since event
-                      timeText: _timeSinceEvent(e),
-
-                      onLike: () {},
-                      onView: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => EventDetailPage(event: e),
-                          ),
-                        );
-                      },
-                      onDelete: () {
-                        if (!canDelete) return;
-                        _confirmDelete(e);
-                      },
-                      onReport: () {},
-                    );
-                  },
+                return _PastEventListView(
+                  events: events,
+                  currentUser: currentUser,
+                  isAdmin: isAdmin,
+                  getAvatar: _getAvatar,
+                  avatarCache: _avatarCache,
+                  timeSinceEvent: _timeSinceEvent,
                 );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 💡 Separate widget to prevent FutureBuilder blinking
+class _PastEventListView extends StatelessWidget {
+  final List<em.EventModel> events;
+  final User? currentUser;
+  final bool isAdmin;
+  final Map<String, String> avatarCache;
+  final Future<String> Function(String) getAvatar;
+  final String Function(em.EventModel) timeSinceEvent;
+
+  const _PastEventListView({
+    required this.events,
+    required this.currentUser,
+    required this.isAdmin,
+    required this.avatarCache,
+    required this.getAvatar,
+    required this.timeSinceEvent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: events.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final e = events[index];
+        final liked = e.likesList.contains(currentUser?.uid);
+        final canDelete = isAdmin;
+
+        return FutureBuilder<String>(
+          future: getAvatar(e.ownerId),
+          builder: (context, snapshot) {
+            // Use cached avatar to prevent blinking
+            final avatarUrl = snapshot.data?.trim().isNotEmpty == true
+                ? snapshot.data
+                : avatarCache[e.ownerId]?.trim().isNotEmpty == true
+                    ? avatarCache[e.ownerId]
+                    : null;
+
+            return EventCard(
+              event: e,
+              posterName: e.ownerName,
+              posterAvatar: avatarUrl,
+              liked: liked,
+              canDelete: canDelete,
+              timeText: timeSinceEvent(e),
+
+              /// ❤️ Past events cannot be liked
+              onLike: () {},
+
+              /// 👁 View event
+              onView: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EventDetailPage(event: e),
+                  ),
+                );
+              },
+
+              /// 🗑 Admin delete
+              onDelete: () {
+                if (!canDelete) return;
+                showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Delete event?'),
+                    content: const Text(
+                        'This event has already passed. This action cannot be undone.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await FirestoreService.instance.deleteEvent(e.id);
+                        },
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+
+              /// 🚩 Optional report
+              onReport: () {},
+
+              /// 👤 VIEW PROFILE
+              onViewProfile: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProfilePage(userId: e.ownerId),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

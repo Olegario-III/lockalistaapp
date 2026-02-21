@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/event_model.dart';
 import '../../core/services/firestore_service.dart';
 import 'edit_event_page.dart';
+import '../profile/profile_page.dart'; // 🔥 ADD THIS (create if not existing)
 
 class EventDetailPage extends StatefulWidget {
   final EventModel event;
@@ -113,8 +114,7 @@ class _EventDetailPageState extends State<EventDetailPage> {
         .delete();
 
     if (!mounted) return;
-
-    Navigator.pop(context); // go back after delete
+    Navigator.pop(context);
   }
 
   @override
@@ -135,7 +135,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.edit),
-              tooltip: 'Edit Event',
               onPressed: () {
                 Navigator.push(
                   context,
@@ -148,7 +147,6 @@ class _EventDetailPageState extends State<EventDetailPage> {
           if (canDelete)
             IconButton(
               icon: const Icon(Icons.delete),
-              tooltip: 'Delete Event',
               onPressed: _deleteEvent,
             ),
         ],
@@ -170,18 +168,11 @@ class _EventDetailPageState extends State<EventDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    event.description,
-                    style: const TextStyle(fontSize: 15),
-                  ),
+                  Text(event.description),
                   const SizedBox(height: 16),
 
-                  Text(
-                    'Start: ${event.startDate.toLocal().toString().split(' ')[0]}',
-                  ),
-                  Text(
-                    'End: ${event.endDate.toLocal().toString().split(' ')[0]}',
-                  ),
+                  Text('Start: ${event.startDate.toLocal().toString().split(' ')[0]}'),
+                  Text('End: ${event.endDate.toLocal().toString().split(' ')[0]}'),
 
                   const SizedBox(height: 16),
 
@@ -215,38 +206,95 @@ class _EventDetailPageState extends State<EventDetailPage> {
                                 isOwner ||
                                 isAdmin);
 
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            c.content,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          subtitle: Text(
-                            c.timestamp.toLocal().toString().split('.')[0],
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          trailing: canDeleteComment
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: Colors.red,
+                        return StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(c.userId)
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            final userData = snapshot.data?.data()
+                                as Map<String, dynamic>?;
+
+                            final avatarUrl = userData?['image'];
+                            final userName = userData?['name'] ?? 'User';
+
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+
+                              // 🔥 CLICKABLE AVATAR
+                              leading: GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          ProfilePage(userId: c.userId),
+                                    ),
+                                  );
+                                },
+                                child: CircleAvatar(
+                                  radius: 20,
+                                  backgroundImage: avatarUrl != null &&
+                                          avatarUrl.isNotEmpty
+                                      ? NetworkImage(avatarUrl)
+                                      : null,
+                                  child: avatarUrl == null ||
+                                          avatarUrl.isEmpty
+                                      ? const Icon(Icons.person)
+                                      : null,
+                                ),
+                              ),
+
+                              title: Text(
+                                userName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+
+                              subtitle: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4),
+                                  Text(c.content),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    c.timestamp
+                                        .toLocal()
+                                        .toString()
+                                        .split('.')[0],
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey),
                                   ),
-                                  onPressed: () async {
-                                    await FirestoreService.instance
-                                        .deleteComment(
-                                      eventId: event.id,
-                                      commentId: c.id,
-                                    );
+                                ],
+                              ),
 
-                                    if (!mounted) return;
+                              trailing: canDeleteComment
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () async {
+                                        await FirestoreService.instance
+                                            .deleteComment(
+                                          eventId: event.id,
+                                          commentId: c.id,
+                                        );
 
-                                    setState(() {
-                                      widget.event.comments
-                                          .removeWhere((e) => e.id == c.id);
-                                    });
-                                  },
-                                )
-                              : null,
+                                        if (!mounted) return;
+
+                                        setState(() {
+                                          widget.event.comments
+                                              .removeWhere(
+                                                  (e) => e.id == c.id);
+                                        });
+                                      },
+                                    )
+                                  : null,
+                            );
+                          },
                         );
                       }).toList(),
                     ),
