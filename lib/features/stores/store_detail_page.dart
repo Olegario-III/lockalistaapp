@@ -1,5 +1,3 @@
-// lib/features/stores/store_detail_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -7,6 +5,7 @@ import '../../core/services/firestore_service.dart';
 import '../../core/utils/helpers.dart';
 import '../../models/store_model.dart';
 import '../../models/comment_model.dart' as cm;
+import '../profile/profile_page.dart';
 import 'edit_store_page.dart';
 
 class StoreDetailPage extends StatefulWidget {
@@ -21,6 +20,27 @@ class StoreDetailPage extends StatefulWidget {
 class _StoreDetailPageState extends State<StoreDetailPage> {
   final TextEditingController _commentController = TextEditingController();
   double _rating = 0;
+
+  /// Avatar cache for both owner and comment authors
+  final Map<String, String> _avatarCache = {};
+
+  /// Get avatar from cache or Firestore
+  Future<String?> _getAvatar(String userId, String? currentUrl) async {
+    if (currentUrl != null && currentUrl.trim().isNotEmpty) {
+      _avatarCache[userId] = currentUrl;
+      return currentUrl;
+    }
+    if (_avatarCache.containsKey(userId)) return _avatarCache[userId];
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final avatar = (doc.data()?['image'] ?? '') as String;
+      _avatarCache[userId] = avatar;
+      return avatar.isNotEmpty ? avatar : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   bool get isOwnerOrAdmin =>
       widget.store.ownerId == Helpers.currentUserId() || Helpers.isAdmin();
@@ -59,7 +79,6 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
     await FirestoreService.instance.deleteStoreComment(widget.store.id, commentId);
   }
 
-  /* ================= REPORT COMMENT ================= */
   Future<void> _reportComment(cm.CommentModel comment) async {
     final currentUserId = Helpers.currentUserId();
     final currentUserName = Helpers.currentUserName();
@@ -100,10 +119,7 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
                 }).toList(),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
                 ElevatedButton(
                   onPressed: selectedReason == null ? null : () => Navigator.pop(context, true),
                   child: const Text('Report'),
@@ -130,7 +146,6 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
       );
 
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Comment reported successfully')),
       );
@@ -142,7 +157,6 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
     }
   }
 
-  /* ================= STAR UI ================= */
   Widget _buildStarRating(double value, {void Function(double)? onChanged}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -158,7 +172,6 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
     );
   }
 
-  /* ================= UI ================= */
   @override
   Widget build(BuildContext context) {
     final store = widget.store;
@@ -170,12 +183,7 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
           if (isOwnerOrAdmin) ...[
             IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => EditStorePage(store: store)),
-                );
-              },
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => EditStorePage(store: store))),
             ),
             IconButton(icon: const Icon(Icons.delete), onPressed: _deleteStore),
           ],
@@ -187,13 +195,33 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
           if (store.images.isNotEmpty)
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                store.images.first,
-                height: 220,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
+              child: Image.network(store.images.first, height: 220, width: double.infinity, fit: BoxFit.cover),
             ),
+          const SizedBox(height: 16),
+          // Store Owner Avatar
+          FutureBuilder<String?>(
+            future: _getAvatar(store.ownerId, null),
+            builder: (context, snapshot) {
+              final avatarUrl = snapshot.data;
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ProfilePage(userId: store.ownerId)),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                      child: avatarUrl == null ? const Icon(Icons.person) : null,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('Owner', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              );
+            },
+          ),
           const SizedBox(height: 16),
           Text('Type: ${store.type}'),
           Text('Barangay: ${store.barangay}'),
@@ -206,11 +234,10 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
               Text('(${store.ratingCount})'),
             ],
           ),
-          if (store.description != null && store.description!.isNotEmpty)
-            ...[
-              const SizedBox(height: 8),
-              Text(store.description!),
-            ],
+          if (store.description != null && store.description!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(store.description!),
+          ],
           const SizedBox(height: 16),
           ElevatedButton.icon(
             icon: const Icon(Icons.map),
@@ -242,14 +269,23 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
                         children: [
                           Row(
                             children: [
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundImage: comment.userAvatar != null && comment.userAvatar!.isNotEmpty
-                                    ? NetworkImage(comment.userAvatar!)
-                                    : null,
-                                child: comment.userAvatar == null || comment.userAvatar!.isEmpty
-                                    ? const Icon(Icons.person, size: 18)
-                                    : null,
+                              // Commenter Avatar
+                              FutureBuilder<String?>(
+                                future: _getAvatar(comment.userId, comment.userAvatar),
+                                builder: (context, snapshot) {
+                                  final avatarUrl = snapshot.data;
+                                  return GestureDetector(
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => ProfilePage(userId: comment.userId)),
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 18,
+                                      backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                                      child: avatarUrl == null ? const Icon(Icons.person, size: 18) : null,
+                                    ),
+                                  );
+                                },
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -269,25 +305,26 @@ class _StoreDetailPageState extends State<StoreDetailPage> {
                           Row(
                             children: [
                               IconButton(
-                                  icon: const Icon(Icons.thumb_up, size: 18),
-                                  onPressed: () => FirestoreService.instance.toggleStoreCommentLike(
-                                        storeId: store.id,
-                                        commentId: comment.id,
-                                        userId: Helpers.currentUserId(),
-                                      )),
+                                icon: const Icon(Icons.thumb_up, size: 18),
+                                onPressed: () => FirestoreService.instance.toggleStoreCommentLike(
+                                  storeId: store.id,
+                                  commentId: comment.id,
+                                  userId: Helpers.currentUserId(),
+                                ),
+                              ),
                               Text('${comment.likes.length}'),
                               IconButton(
-                                  icon: const Icon(Icons.thumb_down, size: 18),
-                                  onPressed: () => FirestoreService.instance.toggleStoreCommentDislike(
-                                        storeId: store.id,
-                                        commentId: comment.id,
-                                        userId: Helpers.currentUserId(),
-                                      )),
+                                icon: const Icon(Icons.thumb_down, size: 18),
+                                onPressed: () => FirestoreService.instance.toggleStoreCommentDislike(
+                                  storeId: store.id,
+                                  commentId: comment.id,
+                                  userId: Helpers.currentUserId(),
+                                ),
+                              ),
                               Text('${comment.dislikes.length}'),
                               const Spacer(),
                               IconButton(icon: const Icon(Icons.report, size: 18), onPressed: () => _reportComment(comment)),
-                              if (canDelete)
-                                IconButton(icon: const Icon(Icons.delete, size: 18), onPressed: () => _deleteComment(comment.id)),
+                              if (canDelete) IconButton(icon: const Icon(Icons.delete, size: 18), onPressed: () => _deleteComment(comment.id)),
                             ],
                           ),
                         ],

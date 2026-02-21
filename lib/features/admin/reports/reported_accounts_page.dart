@@ -35,27 +35,35 @@ class ReportedAccountsPage extends StatelessWidget {
 /// =====================
 /// Tab 1: Reported Users
 /// =====================
-class ReportedUsersList extends StatelessWidget {
+class ReportedUsersList extends StatefulWidget {
   const ReportedUsersList({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final firestore = FirestoreService.instance;
+  State<ReportedUsersList> createState() => _ReportedUsersListState();
+}
 
+class _ReportedUsersListState extends State<ReportedUsersList> {
+  final firestore = FirestoreService.instance;
+  final Set<String> _processing = {}; // track users being processed
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: firestore.reportedUsersStream(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(
-            child: Text('No reported users 🎉'),
-          );
-        }
+        final users = snapshot.data?.docs ?? [];
 
-        final users = snapshot.data!.docs;
+        if (users.isEmpty) {
+          return const Center(child: Text('No reported users 🎉'));
+        }
 
         return ListView.builder(
           itemCount: users.length,
@@ -68,6 +76,7 @@ class ReportedUsersList extends StatelessWidget {
             final reports = data['reportCount'] ?? 0;
             final warnings = data['warningCount'] ?? 0;
             final isBanned = data['isBanned'] ?? false;
+            final isProcessing = _processing.contains(userId);
 
             return Card(
               margin: const EdgeInsets.all(8),
@@ -79,59 +88,71 @@ class ReportedUsersList extends StatelessWidget {
                 title: Text(email),
                 subtitle: Text(
                   'Reports: $reports | Warnings: $warnings | ${isBanned ? "BANNED" : "Active"}',
+                  overflow: TextOverflow.ellipsis,
                 ),
                 trailing: PopupMenuButton<String>(
                   onSelected: (value) async {
-                    switch (value) {
-                      case 'warn':
-                        await firestore.warnUser(userId);
-                        break;
-                      case 'ban':
-                        await firestore.tempBanUser(userId, 7);
-                        break;
-                      case 'delete':
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text('Delete User'),
-                            content: const Text(
-                              'This will permanently delete the user and all reports. Continue?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
+                    if (isProcessing) return;
+                    setState(() => _processing.add(userId));
 
-                        if (confirm == true) {
-                          await firestore.deleteUserCompletely(userId);
-                        }
-                        break;
+                    try {
+                      switch (value) {
+                        case 'warn':
+                          await firestore.warnUser(userId);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('User warned ⚠')),
+                          );
+                          break;
+                        case 'ban':
+                          await firestore.tempBanUser(userId, 7);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('User banned ⛔')),
+                          );
+                          break;
+                        case 'delete':
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Delete User'),
+                              content: const Text(
+                                'This will permanently delete the user and all reports. Continue?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text(
+                                    'Delete',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirm == true) {
+                            await firestore.deleteUserCompletely(userId);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('User deleted 🗑')),
+                            );
+                          }
+                          break;
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    } finally {
+                      setState(() => _processing.remove(userId));
                     }
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'warn',
-                      child: Text('⚠ Warn User'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'ban',
-                      child: Text('⛔ Temp Ban (7 days)'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Text('🗑 Delete User'),
-                    ),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'warn', child: Text('⚠ Warn User')),
+                    PopupMenuItem(value: 'ban', child: Text('⛔ Temp Ban (7 days)')),
+                    PopupMenuItem(value: 'delete', child: Text('🗑 Delete User')),
                   ],
                 ),
               ),
@@ -156,15 +177,15 @@ class ReportedStoreCommentsList extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: firestore.reportedStoreCommentsStream(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No reported store comments 🎉'));
         }
 
         final reports = snapshot.data!.docs;
-
-        if (reports.isEmpty) {
-          return const Center(child: Text('No reported store comments 🎉'));
-        }
 
         return ListView.builder(
           itemCount: reports.length,
@@ -173,27 +194,39 @@ class ReportedStoreCommentsList extends StatelessWidget {
             final data = doc.data() as Map<String, dynamic>;
 
             final storeName = data['storeName'] ?? 'Unknown Store';
-            final reportedUserName =
-                data['reportedUserName'] ?? 'Unknown User';
-            final reportedByName =
-                data['reportedByName'] ?? 'Unknown Reporter';
+            final reportedUserName = data['reportedUserName'] ?? 'Unknown User';
+            final reportedByName = data['reportedByName'] ?? 'Unknown Reporter';
             final reason = data['reason'] ?? 'No reason';
-            final createdAt = data['createdAt'] as Timestamp?;
+            final createdAt = data['createdAt'] is Timestamp
+                ? (data['createdAt'] as Timestamp).toDate()
+                : null;
 
             return Card(
               margin: const EdgeInsets.all(8),
               child: ListTile(
                 title: Text('Store: $storeName'),
-                subtitle: Text(
-                  'Commenter: $reportedUserName\n'
-                  'Reported by: $reportedByName\n'
-                  'Reason: $reason\n'
-                  'Date: ${createdAt != null ? createdAt.toDate() : "Unknown"}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Commenter: $reportedUserName'),
+                    Text('Reported by: $reportedByName'),
+                    Text('Reason: $reason'),
+                    Text('Date: ${createdAt ?? "Unknown"}'),
+                  ],
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () async {
-                    await firestore.deleteReport(doc.id);
+                    try {
+                      await firestore.deleteReport(doc.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Report deleted 🗑')),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
                   },
                 ),
               ),
