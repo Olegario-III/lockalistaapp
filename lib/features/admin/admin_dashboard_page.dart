@@ -19,19 +19,50 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Track which counters have been dismissed
   final List<bool> _hideCounters = List.filled(5, false);
+
+  final List<_DashboardItem> items = [
+    _DashboardItem(
+      title: 'Pending Events',
+      icon: Icons.event,
+      collection: 'events',
+      field: 'status',
+      isEqualTo: 'pending',
+    ),
+    _DashboardItem(
+      title: 'Pending Stores',
+      icon: Icons.store,
+      collection: 'stores',
+      field: 'status',
+      isEqualTo: 'pending',
+    ),
+    _DashboardItem(
+      title: 'Verifications',
+      icon: Icons.verified,
+      collection: 'verification_requests',
+    ),
+    _DashboardItem(
+      title: 'Reports',
+      icon: Icons.report,
+      collection: 'reports',
+    ),
+    _DashboardItem(
+      title: 'Customer Messages',
+      icon: Icons.message,
+      collection: 'customer_messages',
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        setState(() {
-          _hideCounters[_tabController.index] = true; // hide counter on tap
-        });
-      }
+    _tabController = TabController(length: items.length, vsync: this);
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _tabController.index = index;
+      _hideCounters[index] = true;
     });
   }
 
@@ -43,105 +74,106 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      const ApprovalEventsPage(),
+      const ApprovalStoresPage(),
+      const VerificationRequestsPage(),
+      const ReportedAccountsPage(),
+      const AdminCustomerMessagesPage(),
+    ];
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Dashboard'),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: [
-            Tab(
-              child: Row(
-                children: [
-                  const Text('Pending Events'),
-                  TabCounter(
-                    collection: 'events',
-                    field: 'status',
-                    isEqualTo: 'pending',
-                    hideBadge: _hideCounters[0],
-                    onNewItems: () {
-                      setState(() => _hideCounters[0] = false);
-                    },
+      appBar: AppBar(title: const Text('Admin Dashboard')),
+      body: Column(
+        children: [
+          // 🔥 WRAPPED BUTTON TABS
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: List.generate(items.length, (index) {
+                final item = items[index];
+                final isSelected = _tabController.index == index;
+
+                return GestureDetector(
+                  onTap: () => _selectTab(index),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.blue
+                          : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          item.icon,
+                          size: 18,
+                          color: isSelected ? Colors.white : Colors.black,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          item.title,
+                          style: TextStyle(
+                            color:
+                                isSelected ? Colors.white : Colors.black,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+
+                        // 🔴 COUNTER
+                        TabCounter(
+                          collection: item.collection,
+                          field: item.field,
+                          isEqualTo: item.isEqualTo,
+                          hideBadge: _hideCounters[index],
+                          onNewItems: () {
+                            setState(() => _hideCounters[index] = false);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                );
+              }),
             ),
-            Tab(
-              child: Row(
-                children: [
-                  const Text('Pending Stores'),
-                  TabCounter(
-                    collection: 'stores',
-                    field: 'status',
-                    isEqualTo: 'pending',
-                    hideBadge: _hideCounters[1],
-                    onNewItems: () {
-                      setState(() => _hideCounters[1] = false);
-                    },
-                  ),
-                ],
-              ),
+          ),
+
+          // 🔥 TAB CONTENT (STILL WORKS LIKE TAB)
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: pages,
             ),
-            Tab(
-              child: Row(
-                children: [
-                  const Text('Verifications'),
-                  TabCounter(
-                    collection: 'verificationRequests',
-                    hideBadge: _hideCounters[2],
-                    onNewItems: () {
-                      setState(() => _hideCounters[2] = false);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                children: [
-                  const Text('Reports'),
-                  TabCounter(
-                    collection: 'reports',
-                    hideBadge: _hideCounters[3],
-                    onNewItems: () {
-                      setState(() => _hideCounters[3] = false);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                children: [
-                  const Text('Messages'),
-                  TabCounter(
-                    collection: 'messages',
-                    hideBadge: _hideCounters[4],
-                    onNewItems: () {
-                      setState(() => _hideCounters[4] = false);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController, // 🔹 use the same controller
-        children: const [
-          ApprovalEventsPage(),
-          ApprovalStoresPage(),
-          VerificationRequestsPage(),
-          ReportedAccountsPage(),
-          AdminCustomerMessagesPage(),
+          ),
         ],
       ),
     );
   }
 }
 
-/// 🔹 TabCounter widget with auto-refresh and hide-on-tap
+// 🔹 ITEM MODEL
+class _DashboardItem {
+  final String title;
+  final IconData icon;
+  final String collection;
+  final String? field;
+  final dynamic isEqualTo;
+
+  _DashboardItem({
+    required this.title,
+    required this.icon,
+    required this.collection,
+    this.field,
+    this.isEqualTo,
+  });
+}
+
+// 🔹 COUNTER (same logic)
 class TabCounter extends StatefulWidget {
   final String collection;
   final String? field;
@@ -168,6 +200,7 @@ class _TabCounterState extends State<TabCounter> {
   @override
   Widget build(BuildContext context) {
     Query query = FirebaseFirestore.instance.collection(widget.collection);
+
     if (widget.field != null) {
       query = query.where(widget.field!, isEqualTo: widget.isEqualTo);
     }
@@ -177,15 +210,17 @@ class _TabCounterState extends State<TabCounter> {
       builder: (context, snapshot) {
         int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
 
-        // Show badge again if new items appear
         if (count > _lastCount) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             widget.onNewItems();
           });
         }
+
         _lastCount = count;
 
-        if (count == 0 || widget.hideBadge) return const SizedBox();
+        if (count == 0 || widget.hideBadge) {
+          return const SizedBox();
+        }
 
         return Container(
           margin: const EdgeInsets.only(left: 6),
