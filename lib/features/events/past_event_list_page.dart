@@ -23,13 +23,37 @@ class _PastEventListPageState extends State<PastEventListPage> {
   String searchQuery = '';
   bool isAdmin = false;
 
-  /// Cache for owner avatars to reduce reads and blinking
+  List<em.EventModel> events = [];
+  DocumentSnapshot? lastDoc;
+  bool isLoading = false;
+  bool hasMore = true;
+
   final Map<String, String> _avatarCache = {};
+  final ScrollController _scrollController = ScrollController();
+
+  static const int pageSize = 5;
 
   @override
   void initState() {
     super.initState();
     _checkAdmin();
+    fetchPastEvents();
+
+    // ✅ FIXED SCROLL PAGINATION
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 50 &&
+          !isLoading &&
+          hasMore) {
+        fetchPastEvents(loadMore: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkAdmin() async {
@@ -42,74 +66,109 @@ class _PastEventListPageState extends State<PastEventListPage> {
 
     if (!mounted) return;
 
-    setState(() {
-      isAdmin = doc.data()?['role'] == 'admin';
-    });
+    setState(() => isAdmin = doc.data()?['role'] == 'admin');
   }
 
   DateTime _eventDate(em.EventModel e) => e.startDate;
 
   String _timeSinceEvent(em.EventModel e) {
     final diff = DateTime.now().difference(_eventDate(e));
+
     if (diff.inDays > 0) return '${diff.inDays} days ago';
     if (diff.inHours > 0) return '${diff.inHours} hrs ago';
     if (diff.inMinutes > 0) return '${diff.inMinutes} mins ago';
+
     return 'Just now';
   }
 
-  /// Fetch avatar from Firestore or cache
+  Future<void> fetchPastEvents({bool loadMore = false}) async {
+    if (isLoading || !hasMore) return;
+
+    setState(() => isLoading = true);
+
+    Query query = FirebaseFirestore.instance
+        .collection('events')
+        .where('status', isEqualTo: 'approved')
+        .where('startDate',
+            isLessThan: Timestamp.fromDate(DateTime.now()))
+        .orderBy('startDate', descending: true)
+        .limit(pageSize);
+
+    if (loadMore && lastDoc != null) {
+      query = query.startAfterDocument(lastDoc!);
+    }
+
+    final snapshot = await query.get();
+
+    if (!mounted) return;
+
+    if (snapshot.docs.isEmpty) {
+      setState(() {
+        hasMore = false;
+        isLoading = false;
+      });
+      return;
+    }
+
+    lastDoc = snapshot.docs.last;
+
+    final fetched = snapshot.docs
+        .map((doc) => em.EventModel.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            ))
+        .toList();
+
+    setState(() {
+      if (loadMore) {
+        events.addAll(fetched);
+      } else {
+        events = fetched;
+      }
+
+      hasMore = snapshot.docs.length == pageSize;
+      isLoading = false;
+    });
+  }
+
   Future<String> _getAvatar(String ownerId) async {
-    if (_avatarCache.containsKey(ownerId)) return _avatarCache[ownerId]!;
+    if (_avatarCache.containsKey(ownerId)) {
+      return _avatarCache[ownerId]!;
+    }
 
     try {
-      final doc =
-          await FirebaseFirestore.instance.collection('users').doc(ownerId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(ownerId)
+          .get();
+
       final avatar = (doc.data()?['image'] ?? '') as String;
+
       _avatarCache[ownerId] = avatar;
+
       return avatar;
     } catch (_) {
       return '';
     }
   }
 
-  Future<void> _confirmDelete(em.EventModel e) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete event?'),
-        content: const Text(
-          'This event has already passed. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok == true) {
-      await _service.deleteEvent(e.id);
-    }
+  void _onSearch(String v) {
+    setState(() {
+      searchQuery = v.trim().toLowerCase();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
+    final displayedEvents = events
+        .where((e) =>
+            e.title.toLowerCase().contains(searchQuery))
+        .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Past Events'),
-      ),
+      appBar: AppBar(title: const Text('Past Events')),
       body: Column(
         children: [
-          /// 🔍 SEARCH
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -120,156 +179,110 @@ class _PastEventListPageState extends State<PastEventListPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onChanged: (v) {
-                setState(() {
-                  searchQuery = v.trim().toLowerCase();
-                });
-              },
+              onChanged: _onSearch,
             ),
           ),
 
           Expanded(
-            child: StreamBuilder<List<em.EventModel>>(
-              stream: _service.getEventsStream(status: 'approved'),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child: displayedEvents.isEmpty && isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : displayedEvents.isEmpty
+                    ? const Center(child: Text('No past events found.'))
+                    : ListView.separated(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: displayedEvents.length + 1,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          // ✅ EVENTS
+                          if (index < displayedEvents.length) {
+                            final e = displayedEvents[index];
+                            final liked = e.likesList
+                                .contains(currentUser?.uid);
+                            final canDelete = isAdmin;
 
-                final events = (snapshot.data ?? [])
-                    .where((e) => _eventDate(e).isBefore(now))
-                    .where((e) => e.title.toLowerCase().contains(searchQuery))
-                    .toList()
-                      ..sort(
-                        (a, b) => _eventDate(b).compareTo(_eventDate(a)),
-                      );
+                            return FutureBuilder<String>(
+                              future: _getAvatar(e.ownerId),
+                              builder: (context, snapshot) {
+                                final avatarUrl =
+                                    snapshot.data?.trim().isNotEmpty == true
+                                        ? snapshot.data
+                                        : _avatarCache[e.ownerId];
 
-                if (events.isEmpty) {
-                  return const Center(
-                    child: Text('No past events found.'),
-                  );
-                }
+                                return EventCard(
+                                  event: e,
+                                  posterName: e.ownerName,
+                                  posterAvatar: avatarUrl,
+                                  liked: liked,
+                                  canDelete: canDelete,
+                                  timeText: _timeSinceEvent(e),
+                                  onLike: () {},
+                                  onView: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          EventDetailPage(event: e),
+                                    ),
+                                  ),
+                                  onDelete: () async {
+                                    if (!canDelete) return;
+                                    await _service.deleteEvent(e.id);
+                                  },
+                                  onReport: () {},
+                                  onViewProfile: () =>
+                                      Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ProfilePage(
+                                          userId: e.ownerId),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          }
 
-                return _PastEventListView(
-                  events: events,
-                  currentUser: currentUser,
-                  isAdmin: isAdmin,
-                  getAvatar: _getAvatar,
-                  avatarCache: _avatarCache,
-                  timeSinceEvent: _timeSinceEvent,
-                );
-              },
-            ),
+                          // ✅ VERY VISIBLE PAGINATION UI
+                          return Column(
+                            children: [
+                              const SizedBox(height: 20),
+
+                              Text(
+                                'Showing ${events.length} events',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              if (hasMore)
+                                ElevatedButton(
+                                  onPressed: isLoading
+                                      ? null
+                                      : () => fetchPastEvents(
+                                          loadMore: true),
+                                  child: isLoading
+                                      ? const SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child:
+                                              CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                        )
+                                      : const Text('Load More'),
+                                )
+                              else
+                                const Text('No more events'),
+
+                              const SizedBox(height: 30),
+                            ],
+                          );
+                        },
+                      ),
           ),
         ],
       ),
-    );
-  }
-}
-
-/// 💡 Separate widget to prevent FutureBuilder blinking
-class _PastEventListView extends StatelessWidget {
-  final List<em.EventModel> events;
-  final User? currentUser;
-  final bool isAdmin;
-  final Map<String, String> avatarCache;
-  final Future<String> Function(String) getAvatar;
-  final String Function(em.EventModel) timeSinceEvent;
-
-  const _PastEventListView({
-    required this.events,
-    required this.currentUser,
-    required this.isAdmin,
-    required this.avatarCache,
-    required this.getAvatar,
-    required this.timeSinceEvent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: events.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final e = events[index];
-        final liked = e.likesList.contains(currentUser?.uid);
-        final canDelete = isAdmin;
-
-        return FutureBuilder<String>(
-          future: getAvatar(e.ownerId),
-          builder: (context, snapshot) {
-            // Use cached avatar to prevent blinking
-            final avatarUrl = snapshot.data?.trim().isNotEmpty == true
-                ? snapshot.data
-                : avatarCache[e.ownerId]?.trim().isNotEmpty == true
-                    ? avatarCache[e.ownerId]
-                    : null;
-
-            return EventCard(
-              event: e,
-              posterName: e.ownerName,
-              posterAvatar: avatarUrl,
-              liked: liked,
-              canDelete: canDelete,
-              timeText: timeSinceEvent(e),
-
-              /// ❤️ Past events cannot be liked
-              onLike: () {},
-
-              /// 👁 View event
-              onView: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EventDetailPage(event: e),
-                  ),
-                );
-              },
-
-              /// 🗑 Admin delete
-              onDelete: () {
-                if (!canDelete) return;
-                showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Delete event?'),
-                    content: const Text(
-                        'This event has already passed. This action cannot be undone.'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          await FirestoreService.instance.deleteEvent(e.id);
-                        },
-                        style: TextButton.styleFrom(foregroundColor: Colors.red),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-
-              /// 🚩 Optional report
-              onReport: () {},
-
-              /// 👤 VIEW PROFILE
-              onViewProfile: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProfilePage(userId: e.ownerId),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
     );
   }
 }
